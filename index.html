@@ -323,7 +323,7 @@
   <div class="card">
     <h2>Dropbox</h2>
     <div class="set">
-      <label>App Key</label><input type="text" id="sDbxKey"><span></span>
+      <label>App Key</label><input type="text" id="sDbxKey" value="ytkzuki4rtjj8lr"><span></span>
       <label>根目錄</label><input type="text" id="sDbxRoot" placeholder="/VV DOUBLE TEAM 團隊資料夾/官網部門"><span></span>
       <label>實穿素材資料夾</label><input type="text" id="sDbxStaff" placeholder="/…/素材/可用"><span></span>
       <label>授權</label><span id="dbxState" class="muted"></span><button id="dbxConnect">連接 Dropbox</button>
@@ -488,7 +488,8 @@ $('#metaCheck').addEventListener('click', async function(){
 });
 function b64url(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 $('#dbxConnect').addEventListener('click', async function(){
-  var key = $('#sDbxKey').value.trim(); if (!key) { say($('#setMsg'), '先填 App Key 並儲存', 'err'); return; }
+  var key = $('#sDbxKey').value.trim(); if (!key) { say($('#setMsg'), '先填 App Key', 'err'); return; }
+  try { await api('setup', { dropboxAppKey: key, dropboxRoot: $('#sDbxRoot').value, dropboxStaff: $('#sDbxStaff').value }); } catch (e) { say($('#setMsg'), e.message, 'err'); return; }
   var arr = new Uint8Array(48); crypto.getRandomValues(arr);
   var verifier = b64url(arr.buffer);
   var challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
