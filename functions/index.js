@@ -211,7 +211,7 @@ exports.fbpost = onRequest(
 
     const body = req.body || {};
     const action = body.action;
-    if (action === "version") return res.json({ version: VERSION });
+    if (action === "version") return res.json({ version: VERSION, sha: "__GIT_SHA__" });
 
     const cfg = await loadConfig();
     const pw = req.get("X-Tool-Password") || "";
