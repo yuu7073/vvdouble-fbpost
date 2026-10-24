@@ -54,6 +54,7 @@
   .cell{min-height:118px;border:1px dashed var(--line);border-radius:8px;background:#fff;padding:6px;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:4px}
   .cell:hover{border-color:var(--acc)}
   .cell.has{border-style:solid}
+  .cell.cur{outline:2px solid var(--acc)}
   .cell .ty{font-size:12px;font-weight:600;line-height:1.3}
   .cell .ty.empty{color:#c6cad3;font-weight:400;text-align:center;margin:auto;font-size:20px}
   .cell img{width:100%;height:56px;object-fit:cover;border-radius:4px;background:#eee}
@@ -148,7 +149,6 @@
   <h1>VV DOUBLE · FB 貼文</h1>
   <nav class="tabs">
     <button class="on" data-t="cal">週曆</button>
-    <button data-t="edit">編輯</button>
     <button data-t="list">紀錄</button>
     <button data-t="stats">成效</button>
     <button data-t="set">設定</button>
@@ -177,10 +177,10 @@
       <div class="card"><h2>本週素材清單</h2><ul id="assets" class="assets"></ul></div>
     </div>
   </div>
-</section>
 
-<!-- ================= 編輯 ================= -->
-<section class="pane" id="pane-edit">
+<!-- ================= 編輯（同頁，點格後出現） ================= -->
+<div id="editWrap" class="hide" style="margin-top:18px;border-top:2px solid var(--line);padding-top:16px">
+<div class="row" style="margin-bottom:10px"><h2 style="margin:0;font-size:15px" id="editTitle">編輯</h2><span class="sp"></span><button id="backCal" class="sm">收合</button></div>
 <div class="edgrid">
 <div>
   <div class="card">
@@ -267,12 +267,12 @@
       <button id="pub" class="p" style="flex:1">發布 / 排程</button>
     </div>
     <div class="row" style="margin-top:8px">
-      <button id="backCal" class="sm">回週曆</button>
       <span class="sp"></span>
       <button id="delSlot" class="sm d">清除這格</button>
     </div>
     <div id="pubMsg" class="msg"></div>
   </div>
+</div>
 </div>
 </div>
 </section>
@@ -594,7 +594,8 @@ async function openSlot(date, slot){
   $('#linkCustom').value = c.linkCustom || '';
   if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig }); }); }
   applyType(); renderProds(); renderChips(); renderLinkOptions(); if (c.link) $('#linkSel').value = c.link;
-  renderActs(); renderSel(); renderLink(); renderPreview(); go('edit');
+  renderActs(); renderSel(); renderLink(); renderPreview();
+  $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (c.images && c.images.length) { await reloadImages(); }
   if (TYPES[S.type].folder === 'staff' && S.cfg.dropboxStaff) dbxLoad(S.cfg.dropboxStaff); else if (S.cfg.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
 }
@@ -604,7 +605,7 @@ async function reloadImages(){
     im.loading = false; }
   renderSel();
 }
-$('#backCal').addEventListener('click', function(){ go('cal'); loadWeek(); });
+$('#backCal').addEventListener('click', function(){ $('#editWrap').classList.add('hide'); window.scrollTo({ top: 0, behavior: 'smooth' }); loadWeek(); });
 $('#type').addEventListener('change', function(){ S.type = $('#type').value; applyType(); reprocessAll(); renderActs(); });
 function applyType(){
   var t = TYPES[S.type];
@@ -883,12 +884,12 @@ $('#saveDraft').addEventListener('click', async function(){
   var m = $('#pubMsg'), k = curSlotKey(); if (!k) return;
   try {
     if (S.cur && (S.cur.date !== k.date || S.cur.slot !== k.slot)) await api('saveSlot', { date: S.cur.date, slot: S.cur.slot, data: null });
-    await api('saveSlot', { date: k.date, slot: k.slot, data: slotData('draft') }); S.cur = k; say(m, '草稿已存', 'ok');
+    await api('saveSlot', { date: k.date, slot: k.slot, data: slotData('draft') }); S.cur = k; say(m, '草稿已存', 'ok'); loadWeek();
   } catch (e) { say(m, e.message, 'err'); }
 });
 $('#delSlot').addEventListener('click', async function(){
   if (!S.cur || !confirm('清除這格的內容？')) return;
-  try { await api('saveSlot', { date: S.cur.date, slot: S.cur.slot, data: null }); go('cal'); loadWeek(); } catch (e) { say($('#pubMsg'), e.message, 'err'); }
+  try { await api('saveSlot', { date: S.cur.date, slot: S.cur.slot, data: null }); $('#editWrap').classList.add('hide'); loadWeek(); } catch (e) { say($('#pubMsg'), e.message, 'err'); }
 });
 $('#pub').addEventListener('click', async function(){
   var m = $('#pubMsg'), k = curSlotKey(); if (!k) return;
@@ -906,7 +907,7 @@ $('#pub').addEventListener('click', async function(){
       images: ims.map(function(i){ return { b64: i.b64, mime: i.mime, name: i.name }; }),
       meta: { type: S.type, skus: S.selected.map(function(p){ return p.sku; }), titles: S.selected.map(function(p){ return p.title; }), utm: currentLink() ? utmCampaign(ts) : '', by: $('#who').value, date: k.date, slot: k.slot }
     });
-    say(m, (r.scheduled ? '已排程' : '已發布') + '　貼文 ID ' + r.postId, 'ok');
+    say(m, (r.scheduled ? '已排程' : '已發布') + '　貼文 ID ' + r.postId, 'ok'); loadWeek();
   } catch (e) { say(m, e.message, 'err'); }
   $('#pub').disabled = false;
 });
