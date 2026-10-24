@@ -211,6 +211,7 @@
       <span class="sp"></span>
       <button id="dbxUp">上一層</button>
       <button id="dbxRefresh">重新整理</button>
+      <button id="dbxSetRoot" class="sm">設為根目錄</button>
     </div>
     <div id="dbxWrap">
       <div class="crumb" id="crumb"></div>
@@ -658,8 +659,9 @@ $$('#imgSrc button').forEach(function(b){ b.addEventListener('click', function()
   $('#dbxUp').classList.toggle('hide', S.imgSrc !== 'dbx'); $('#dbxRefresh').classList.toggle('hide', S.imgSrc !== 'dbx');
   if (S.imgSrc === 'sl') renderSlFiles();
 }); });
-$('#dbxUp').addEventListener('click', function(){ if (!S.dbxPath || S.dbxPath.toLowerCase() === S.dbxRoot.toLowerCase()) return; dbxLoad(S.dbxPath.replace(/\/[^\/]+$/, '')); });
+$('#dbxUp').addEventListener('click', function(){ if (!S.dbxPath) return; dbxLoad(S.dbxPath.replace(/\/[^\/]+$/, '')); });
 $('#dbxRefresh').addEventListener('click', function(){ dbxLoad(S.dbxPath); });
+$('#dbxSetRoot').addEventListener('click', async function(){ if (!S.dbxPath) return; try { await api('setup', { dropboxRoot: S.dbxPath }); S.dbxRoot = S.dbxPath; $('#sDbxRoot').value = S.dbxPath; renderDbx(); say($('#pubMsg'), '根目錄已設為 ' + S.dbxPath, 'ok'); } catch (e) { say($('#pubMsg'), e.message, 'err'); } });
 async function dbxLoad(path){
   $('#folders').innerHTML = '<div class="muted">載入中…</div>'; $('#files').innerHTML = '';
   try {
@@ -675,7 +677,7 @@ async function dbxLoad(path){
 function renderDbx(){
   var root = S.dbxRoot, rel = S.dbxPath.toLowerCase().indexOf(root.toLowerCase()) === 0 ? S.dbxPath.slice(root.length) : S.dbxPath;
   var segs = rel.split('/').filter(Boolean), acc = S.dbxPath.toLowerCase().indexOf(root.toLowerCase()) === 0 ? root : '';
-  var html = '<a data-p="' + esc(root) + '">官網部門</a>';
+  var html = '<a data-p="">Dropbox</a>' + (root ? ' / <a data-p="' + esc(root) + '">' + esc(root.split('/').pop()) + '</a>' : '');
   segs.forEach(function(seg){ acc += '/' + seg; html += ' / <a data-p="' + esc(acc) + '">' + esc(seg) + '</a>'; });
   $('#crumb').innerHTML = html;
   $$('#crumb a').forEach(function(a){ a.addEventListener('click', function(){ dbxLoad(a.dataset.p); }); });

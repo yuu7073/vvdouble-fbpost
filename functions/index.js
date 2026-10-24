@@ -6,7 +6,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25d";
+const VERSION = "2026-10-25e";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -134,16 +134,33 @@ async function dbxToken(cfg) {
   dbxCache.exp = Date.now() + (j.expires_in || 14400) * 1000;
   return j.access_token;
 }
-async function dbxRpc(cfg, path, json) {
+// Dropbox Business：團隊資料夾在 root namespace，所有呼叫都帶 Path-Root
+let dbxRootNs = "";
+async function dbxPathRoot(cfg) {
+  if (dbxRootNs) return dbxRootNs;
   const tok = await dbxToken(cfg);
-  const r = await fetch(DBX_API + path, { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(json) });
+  const r = await fetch(DBX_API + "/users/get_current_account", { method: "POST", headers: { Authorization: "Bearer " + tok } });
+  const j = await r.json().catch(() => ({}));
+  const ri = j.root_info || {};
+  if (ri.root_namespace_id && ri.root_namespace_id !== ri.home_namespace_id) dbxRootNs = JSON.stringify({ ".tag": "root", root: ri.root_namespace_id });
+  else dbxRootNs = "home";
+  return dbxRootNs;
+}
+async function dbxHeaders(cfg, extra) {
+  const tok = await dbxToken(cfg);
+  const h = Object.assign({ Authorization: "Bearer " + tok }, extra || {});
+  const pr = await dbxPathRoot(cfg);
+  if (pr && pr !== "home") h["Dropbox-API-Path-Root"] = pr;
+  return h;
+}
+async function dbxRpc(cfg, path, json) {
+  const r = await fetch(DBX_API + path, { method: "POST", headers: await dbxHeaders(cfg, { "Content-Type": "application/json" }), body: JSON.stringify(json) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error("Dropbox " + path + " " + r.status + " " + JSON.stringify(j).slice(0, 200));
   return j;
 }
 async function dbxContent(cfg, path, arg) {
-  const tok = await dbxToken(cfg);
-  const r = await fetch(DBX_CONTENT + path, { method: "POST", headers: { Authorization: "Bearer " + tok, "Dropbox-API-Arg": JSON.stringify(arg) } });
+  const r = await fetch(DBX_CONTENT + path, { method: "POST", headers: await dbxHeaders(cfg, { "Dropbox-API-Arg": JSON.stringify(arg) }) });
   if (!r.ok) throw new Error("Dropbox " + path + " " + r.status + " " + (await r.text()).slice(0, 200));
   return Buffer.from(await r.arrayBuffer());
 }
@@ -278,12 +295,12 @@ exports.fbpost = onRequest(
           const j = await r.json();
           if (!j.refresh_token) return res.status(400).json({ error: "Dropbox 授權失敗", detail: j });
           await cfgRef().update({ dropboxRefresh: j.refresh_token, dropboxAccount: j.account_id || "" });
-          dbxCache.token = ""; dbxCache.exp = 0;
+          dbxCache.token = ""; dbxCache.exp = 0; dbxRootNs = "";
           return res.json({ ok: true });
         }
 
         case "dropboxList": {
-          const path = body.path || cfg.dropboxRoot || "";
+          const path = (body.path !== undefined ? body.path : (cfg.dropboxRoot || "")) || "";
           let j = await dbxRpc(cfg, "/files/list_folder", { path, limit: 2000, include_non_downloadable_files: false });
           let entries = j.entries || [];
           while (j.has_more) { j = await dbxRpc(cfg, "/files/list_folder/continue", { cursor: j.cursor }); entries = entries.concat(j.entries || []); }
@@ -291,7 +308,7 @@ exports.fbpost = onRequest(
           const files = entries.filter((e) => e[".tag"] === "file" && IMG_RE.test(e.name)).map((e) => ({ name: e.name, path: e.path_lower, size: e.size }));
           folders.sort((a, b) => b.name.localeCompare(a.name, "zh-Hant"));
           files.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant", { numeric: true }));
-          return res.json({ path, folders, files });
+          return res.json({ path, folders, files, pathRoot: await dbxPathRoot(cfg) });
         }
 
         case "dropboxThumbs": {
