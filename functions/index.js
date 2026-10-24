@@ -1,12 +1,14 @@
 // VV DOUBLE · FB 貼文工具 · Cloud Function 中間站
 // 網頁 → 這裡（各家 Token 存在 Realtime Database /fbpost/config，前端讀不到）→ Meta / Dropbox / Shopline / Anthropic
 const { onRequest } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const SHOPLINE_TOKEN = defineSecret("SHOPLINE_TOKEN"); // 與官網批次中心共用
 const admin = require("firebase-admin");
 const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25f";
+const VERSION = "2026-10-25g";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -34,7 +36,9 @@ const cfgRef = () => db().ref("/fbpost/config");
 
 async function loadConfig() {
   const s = await cfgRef().get();
-  return s.exists() ? s.val() : {};
+  const cfg = s.exists() ? s.val() : {};
+  if (!cfg.shoplineToken) { try { cfg.shoplineToken = SHOPLINE_TOKEN.value(); } catch (e) {} }
+  return cfg;
 }
 
 // ---------- 小工具 ----------
@@ -222,7 +226,7 @@ ${cfg.copyRules ? "額外規則：" + cfg.copyRules : ""}
 
 // ---------- 主程式 ----------
 exports.fbpost = onRequest(
-  { region: "asia-east1", memory: "1GiB", timeoutSeconds: 300, cors: false },
+  { region: "asia-east1", memory: "1GiB", timeoutSeconds: 300, cors: false, secrets: [SHOPLINE_TOKEN] },
   async (req, res) => {
     cors(req, res);
     if (req.method === "OPTIONS") return res.status(204).send("");
