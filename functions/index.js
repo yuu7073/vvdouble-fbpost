@@ -2,10 +2,11 @@
 // 網頁 → 這裡（各家 Token 存在 Realtime Database /fbpost/config，前端讀不到）→ Meta / Dropbox / Shopline / Anthropic
 const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25b";
+const VERSION = "2026-10-25c";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -54,6 +55,42 @@ function utmCampaign(ts) {
 }
 function stripHtml(s) {
   return String(s || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// ---------- Google Sheets（Cloud Function 服務帳號讀取；試算表需分享給它）----------
+async function sheetsGet(spreadsheetId, range) {
+  const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"] });
+  const client = await auth.getClient();
+  const r = await client.request({ url: `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}` });
+  return (r.data && r.data.values) || [];
+}
+async function serviceEmail() {
+  try { const auth = new GoogleAuth(); const c = await auth.getCredentials(); if (c && c.client_email) return c.client_email; } catch (e) {}
+  try { const r = await fetch("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email", { headers: { "Metadata-Flavor": "Google" } }); return await r.text(); } catch (e) { return ""; }
+}
+// 「10/15」「11/3（直播 11/2）」→ 取第一個 M/D；年份：7 月以後算 baseYear，否則 baseYear+1
+function parseMD(s, baseYear) {
+  const m = String(s || "").match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (!m) return null;
+  const mo = Number(m[1]), d = Number(m[2]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const y = mo >= 7 ? baseYear : baseYear + 1;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+function addDays(iso, n) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+// ---------- reurl.cc 短網址 ----------
+async function shorten(cfg, url) {
+  if (!cfg.reurlKey) throw new Error("尚未設定 reurl API Key");
+  const key = Buffer.from(url).toString("base64url").slice(0, 120);
+  const ref = db().ref("/fbpost/short/" + key);
+  const s = await ref.get();
+  if (s.exists() && s.val().short) return s.val().short;
+  const r = await fetch("https://api.reurl.cc/shorten", { method: "POST", headers: { "Content-Type": "application/json", "reurl-api-key": cfg.reurlKey }, body: JSON.stringify({ url }) });
+  const j = await r.json().catch(() => ({}));
+  if (!j.short_url) throw new Error("reurl 失敗：" + JSON.stringify(j).slice(0, 160));
+  await ref.set({ url, short: j.short_url, at: Date.now() });
+  return j.short_url;
 }
 
 // ---------- Shopline ----------
@@ -204,17 +241,23 @@ exports.fbpost = onRequest(
             utmSource: cfg.utmSource || "fb",
             utmMedium: cfg.utmMedium || "ad",
             dropboxStaff: cfg.dropboxStaff || "",
+            reurl: !!cfg.reurlKey,
+            scheduleSheet: cfg.scheduleSheet || "1vrsXPERq4ppkHmlhdwU3IHKc6WZrgN9Kc8H97mvVQAs",
+            scheduleYear: Number(cfg.scheduleYear) || 2026,
+            serviceEmail: await serviceEmail(),
+            templates: cfg.templates || null,
           });
         }
 
         case "setup": {
           // 只更新有送來的欄位；空字串代表不改
-          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "utmSource", "utmMedium", "newPassword"];
+          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "reurlKey", "scheduleSheet", "scheduleYear", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "utmSource", "utmMedium", "newPassword"];
           const upd = {};
           for (const k of allow) {
             if (typeof body[k] === "string" && body[k].trim() !== "") upd[k === "newPassword" ? "password" : k] = body[k].trim();
           }
           if (body.clearDropbox) upd.dropboxRefresh = null;
+          if (body.templates && typeof body.templates === "object") upd.templates = body.templates;
           upd.updatedAt = Date.now();
           await cfgRef().update(upd);
           return res.json({ ok: true });
@@ -302,6 +345,61 @@ exports.fbpost = onRequest(
           return res.json({ variants });
         }
 
+        // ----- 週曆 -----
+        case "week": {
+          const dates = (body.dates || []).slice(0, 14);
+          const out = {};
+          for (const d of dates) { const s = await db().ref("/fbpost/slots/" + d).get(); out[d] = s.exists() ? s.val() : {}; }
+          const wt = await db().ref("/fbpost/weekType/" + (dates[0] || "")).get();
+          return res.json({ slots: out, weekType: wt.exists() ? wt.val() : "" });
+        }
+        case "saveSlot": {
+          const { date, slot, data } = body;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || !/^\d{4}$/.test(slot || "")) return res.status(400).json({ error: "日期或時段格式錯誤" });
+          if (data === null) { await db().ref(`/fbpost/slots/${date}/${slot}`).remove(); return res.json({ ok: true }); }
+          const clean = Object.assign({}, data, { updatedAt: Date.now() });
+          await db().ref(`/fbpost/slots/${date}/${slot}`).update(clean);
+          return res.json({ ok: true });
+        }
+        case "setWeekType": {
+          await db().ref("/fbpost/weekType/" + body.monday).set(body.weekType || "");
+          return res.json({ ok: true });
+        }
+
+        // ----- 行銷排程／活動明細 -----
+        case "activities": {
+          const sheet = cfg.scheduleSheet || "1vrsXPERq4ppkHmlhdwU3IHKc6WZrgN9Kc8H97mvVQAs";
+          const year = Number(cfg.scheduleYear) || 2026;
+          const rows = await sheetsGet(sheet, "活動明細!A1:Z200");
+          const head = rows.find((r) => r.includes("活動／新品名稱")) || [];
+          const hi = rows.indexOf(head);
+          const col = (name) => head.findIndex((h) => String(h).replace(/\s/g, "").includes(name));
+          const ci = { name: col("名稱"), start: col("開始"), end: col("結束"), mech: col("優惠機制"), type: col("類型"), url: head.findIndex((h) => /網址|URL|url|連結/.test(String(h))), note: col("注意") };
+          const items = [];
+          rows.slice(hi + 1).forEach((r, i) => {
+            const name = r[ci.name]; if (!name) return;
+            const start = parseMD(r[ci.start], year); if (!start) return;
+            const end = parseMD(r[ci.end], year) || addDays(start, 30);
+            items.push({ row: hi + 2 + i, name: String(name).trim(), type: r[ci.type] || "", start, end, mech: r[ci.mech] || "", note: r[ci.note] || "", url: ci.url >= 0 ? (r[ci.url] || "") : "", startRaw: r[ci.start] || "", endRaw: r[ci.end] || "" });
+          });
+          // 新品上架日期（行銷排程的「新品時程」列）
+          let newDates = [];
+          try {
+            const sch = await sheetsGet(sheet, "行銷排程!A1:ZZ6");
+            const dateRow = sch.find((r) => r[0] === "日期") || [];
+            const npRow = sch.find((r) => r[0] === "新品時程") || [];
+            npRow.forEach((v, i) => { if (/上架/.test(String(v || ""))) { const d = parseMD(dateRow[i], year); if (d) newDates.push({ date: d, label: String(v).replace(/\s+/g, " ") }); } });
+          } catch (e) { console.warn("schedule read", e.message); }
+          return res.json({ items, newDates });
+        }
+
+        case "shorten": {
+          const url = String(body.url || "").trim();
+          if (!/^https?:\/\//.test(url)) return res.status(400).json({ error: "網址格式錯誤" });
+          const short = await shorten(cfg, url);
+          return res.json({ short });
+        }
+
         // ----- 發布 -----
         case "publish": {
           if (!cfg.metaToken || !cfg.pageId) return res.status(400).json({ error: "尚未設定 Meta" });
@@ -332,6 +430,7 @@ exports.fbpost = onRequest(
             scheduledAt: isScheduled ? scheduledAt : 0, status: isScheduled ? "scheduled" : "published", createdAt: Date.now(),
           };
           const ref = await db().ref("/fbpost/posts").push(rec);
+          if (meta.date && meta.slot) await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).update({ status: isScheduled ? "scheduled" : "published", postId, recId: ref.key, updatedAt: Date.now() });
           return res.json({ ok: true, postId, id: ref.key, scheduled: !!isScheduled });
         }
 
@@ -339,6 +438,7 @@ exports.fbpost = onRequest(
           const { id, postId } = body;
           if (postId) { try { await fbDelete(cfg.metaToken, postId); } catch (e) { if (!/does not exist|Unsupported/.test(e.message)) throw e; } }
           if (id) await db().ref("/fbpost/posts/" + id).update({ status: "deleted", deletedAt: Date.now() });
+          if (body.date && body.slot) await db().ref(`/fbpost/slots/${body.date}/${body.slot}`).update({ status: "draft", postId: null, recId: null });
           return res.json({ ok: true });
         }
 
