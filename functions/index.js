@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25g";
+const VERSION = "2026-10-25h";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -315,6 +315,34 @@ exports.fbpost = onRequest(
           folders.sort((a, b) => b.name.localeCompare(a.name, "zh-Hant"));
           files.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant", { numeric: true }));
           return res.json({ path, folders, files, pathRoot: await dbxPathRoot(cfg) });
+        }
+
+        case "dropboxFind": {
+          // 依商品名找 Dropbox 資料夾：資料夾命名「OK <商品名>」，分色款再一層顏色子資料夾
+          const title = String(body.title || "").trim();
+          if (!title) return res.status(400).json({ error: "缺少商品名" });
+          const m = title.match(/^(.*?)(?:-([^-]{1,6}))?$/);
+          const base = (m && m[1] || title).trim(), color = (m && m[2] || "").trim();
+          const norm = (s) => String(s || "").replace(/^ok\s*/i, "").replace(/[\s　]/g, "").toLowerCase();
+          const q = base.replace(/[《》〈〉「」『』【】()（）]/g, " ").trim().slice(0, 60);
+          const root = cfg.dropboxRoot || "";
+          let j = await dbxRpc(cfg, "/files/search_v2", { query: q, options: { path: root || "", max_results: 50, file_status: "active", filename_only: true, file_categories: [{ ".tag": "folder" }] } });
+          let hits = (j.matches || []).map((x) => x.metadata && x.metadata.metadata).filter((x) => x && x[".tag"] === "folder");
+          const nb = norm(base);
+          let exact = hits.filter((h) => norm(h.name) === nb || norm(h.name) === norm(title));
+          let partial = hits.filter((h) => norm(h.name).includes(nb) || nb.includes(norm(h.name)));
+          const cand = (exact.length ? exact : partial).sort((a, b) => b.path_lower.localeCompare(a.path_lower));
+          if (!cand.length) return res.json({ found: false, tried: q });
+          let path = cand[0].path_lower, pickedColor = "";
+          // 顏色子資料夾
+          try {
+            const sub = await dbxRpc(cfg, "/files/list_folder", { path, limit: 200 });
+            const folders = (sub.entries || []).filter((e) => e[".tag"] === "folder");
+            const files = (sub.entries || []).filter((e) => e[".tag"] === "file" && IMG_RE.test(e.name));
+            if (color) { const c = folders.find((e) => norm(e.name).includes(norm(color))); if (c) { path = c.path_lower; pickedColor = c.name; } }
+            if (!pickedColor && !files.length && folders.length === 1 && !/^(gif|長條圖)$/i.test(folders[0].name)) { path = folders[0].path_lower; pickedColor = folders[0].name; }
+          } catch (e) {}
+          return res.json({ found: true, path, folder: cand[0].name, color: pickedColor, others: cand.slice(1, 5).map((c) => ({ name: c.name, path: c.path_lower })) });
         }
 
         case "dropboxThumbs": {

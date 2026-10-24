@@ -643,12 +643,21 @@ function renderProds(){
 }
 function toggleProd(p){
   var i = S.selected.findIndex(function(s){ return s.id === p.id; });
-  if (i >= 0) S.selected.splice(i, 1); else S.selected.push(p);
+  if (i >= 0) S.selected.splice(i, 1); else { S.selected.push(p); if (p.title && S.cfg.dropbox && S.imgSrc === 'dbx') dbxFind(p.title); }
   renderProds(); renderChips(); renderLinkOptions(); renderSlFiles();
 }
+async function dbxFind(title){
+  $('#folders').innerHTML = '<div class="muted">找資料夾…</div>'; $('#files').innerHTML = '';
+  try {
+    var r = await api('dropboxFind', { title: title });
+    if (r.found) { await dbxLoad(r.path); say($('#pubMsg'), '已開啟 ' + r.folder + (r.color ? ' / ' + r.color : ''), 'ok'); }
+    else { await dbxLoad(S.dbxPath || S.dbxRoot); say($('#pubMsg'), 'Dropbox 找不到這款的資料夾，請手動點選', 'err'); }
+  } catch (e) { say($('#pubMsg'), e.message, 'err'); dbxLoad(S.dbxPath || S.dbxRoot); }
+}
 function renderChips(){
-  $('#chips').innerHTML = S.selected.map(function(p){ return '<span class="chip">' + esc(p.sku || p.title) + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
+  $('#chips').innerHTML = S.selected.map(function(p){ return '<span class="chip"><i data-f="' + esc(p.title) + '" style="cursor:pointer;font-style:normal" title="開啟 Dropbox 資料夾">📁</i> ' + esc(p.sku || p.title) + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
   $$('#chips b').forEach(function(b){ b.addEventListener('click', function(){ toggleProd({ id: b.dataset.id }); }); });
+  $$('#chips i').forEach(function(b){ b.addEventListener('click', function(){ dbxFind(b.dataset.f); }); });
 }
 
 /* ---------- 圖片 ---------- */
