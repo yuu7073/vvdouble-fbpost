@@ -176,7 +176,6 @@
     <div class="row">
       <select id="linkSel"></select>
       <input type="text" id="linkCustom" placeholder="自訂網址" class="hide">
-      <select id="medium"><option value="ad">ad</option><option value="story">story</option><option value="post">post</option></select>
       <button id="insLink">插入文案</button>
     </div>
     <div class="link" id="linkOut"></div>
@@ -351,7 +350,7 @@ async function loadStatus(){
     $('#sModel').value = s.claudeModel; $('#sRules').value = s.copyRules; $('#sUtmS').value = s.utmSource; $('#sUtmM').value = s.utmMedium;
     $('#dbxState').textContent = s.dropbox ? '已授權' : '尚未授權';
     S.dbxRoot = s.dropboxRoot || '';
-    S.medium = s.utmMedium || 'ad'; $('#medium').value = S.medium;
+    S.medium = s.utmMedium || 'ad';
     if (!S.dbxPath) { S.dbxPath = S.dbxRoot; }
     if (s.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
     renderLink();
@@ -582,7 +581,6 @@ function renderLinkOptions(){
 }
 $('#linkSel').addEventListener('change', function(){ $('#linkCustom').classList.toggle('hide', $('#linkSel').value !== 'custom'); renderLink(); });
 $('#linkCustom').addEventListener('input', renderLink);
-$('#medium').addEventListener('change', function(){ S.medium = $('#medium').value; renderLink(); });
 function currentLink(){
   var base = $('#linkSel').value === 'custom' ? $('#linkCustom').value.trim() : $('#linkSel').value;
   if (!base) return '';
