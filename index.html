@@ -595,7 +595,7 @@ async function openSlot(date, slot){
   if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig }); }); }
   applyType(); renderProds(); renderChips(); renderLinkOptions(); if (c.link) $('#linkSel').value = c.link;
   renderActs(); renderSel(); renderLink(); renderPreview();
-  $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; renderCal(); $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (c.images && c.images.length) { await reloadImages(); }
   if (TYPES[S.type].folder === 'staff' && S.cfg.dropboxStaff) dbxLoad(S.cfg.dropboxStaff); else if (S.cfg.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
 }
