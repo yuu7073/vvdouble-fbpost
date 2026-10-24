@@ -6,7 +6,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25c";
+const VERSION = "2026-10-25d";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -443,10 +443,10 @@ exports.fbpost = onRequest(
         }
 
         case "listPosts": {
-          const snap = await db().ref("/fbpost/posts").orderByChild("createdAt").limitToLast(Number(body.n) || 100).get();
+          const snap = await db().ref("/fbpost/posts").limitToLast(Number(body.n) || 100).get();
           const out = [];
           snap.forEach((c) => { out.push({ id: c.key, ...c.val() }); });
-          out.reverse();
+          out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           return res.json({ posts: out });
         }
 
