@@ -6,7 +6,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25e";
+const VERSION = "2026-10-25f";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -160,7 +160,9 @@ async function dbxRpc(cfg, path, json) {
   return j;
 }
 async function dbxContent(cfg, path, arg) {
-  const r = await fetch(DBX_CONTENT + path, { method: "POST", headers: await dbxHeaders(cfg, { "Dropbox-API-Arg": JSON.stringify(arg) }) });
+  // header 只能放 ASCII：非 ASCII 字元轉成 \uXXXX（Dropbox 官方建議做法）
+  const argStr = JSON.stringify(arg).replace(/[\u007f-\uffff]/g, (c) => "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4));
+  const r = await fetch(DBX_CONTENT + path, { method: "POST", headers: await dbxHeaders(cfg, { "Dropbox-API-Arg": argStr }) });
   if (!r.ok) throw new Error("Dropbox " + path + " " + r.status + " " + (await r.text()).slice(0, 200));
   return Buffer.from(await r.arrayBuffer());
 }
