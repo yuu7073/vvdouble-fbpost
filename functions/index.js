@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25n";
+const VERSION = "2026-10-25o";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -56,6 +56,29 @@ function taipeiParts(ts) {
 function utmCampaign(ts) {
   const p = taipeiParts(ts);
   return `${p.month}${p.day}${p.year}_${p.hour}${p.minute}`;
+}
+// 商品描述裡的「模特兒參考」表：MODEL／穿著／身高／體重／…／感受
+function parseModels(html) {
+  const out = [];
+  const parts = String(html || "").split(/模特兒參考|MODELS REFERENCE/i);
+  const sec = parts[parts.length - 1];
+  if (parts.length < 2) return out;
+  const table = sec.split(/<\/table>/i)[0];
+  const rows = table.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  let head = [];
+  rows.forEach((r) => {
+    const cells = (r.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).map((c) => c.replace(/<[^>]+>/g, "").trim());
+    if (!cells.length) return;
+    if (/MODEL/i.test(cells[0]) || /穿著/.test(cells.join(""))) { head = cells; return; }
+    const o = {}; cells.forEach((v, i) => { o[head[i] || ("c" + i)] = v; });
+    const name = o.MODEL || cells[0];
+    if (name) out.push({ name, size: o["穿著"] || cells[1] || "", height: o["身高"] || "", weight: o["體重"] || "", feel: o["感受"] || "" });
+  });
+  return out;
+}
+function parseMaterial(html) {
+  const m = String(html || "").replace(/<[^>]+>/g, " ").match(/材質[：:]\s*([^|｜\n]{2,60})/);
+  return m ? m[1].trim() : "";
 }
 function stripHtml(s) {
   return String(s || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -119,7 +142,9 @@ function slProduct(it) {
     price, priceSale,
     images: (it.medias || []).map((m) => m.images && m.images.original && m.images.original.url).filter(Boolean),
     detailImages: (it.detail_medias || []).map((m) => m.images && m.images.original && m.images.original.url).filter(Boolean),
-    description: stripHtml((it.description_translations || {})["zh-hant"] || ""),
+    description: stripHtml((it.description_translations || {})["zh-hant"] || "").replace(/商品平量尺寸表[\s\S]*$/, "").slice(0, 800),
+    models: parseModels((it.description_translations || {})["zh-hant"] || ""),
+    material: parseMaterial((it.description_translations || {})["zh-hant"] || ""),
     colors: [...new Set(v.map((x) => ((x.fields_translations || [])[0] || {})["zh-hant"] || (x.fields || [])[0] && (x.fields[0]["zh-hant"] || x.fields[0].name) || "").filter(Boolean))],
     sizes: [...new Set(v.map((x) => ((x.fields_translations || [])[1] || {})["zh-hant"] || (x.fields || [])[1] && (x.fields[1]["zh-hant"] || x.fields[1].name) || "").filter(Boolean))],
     url: "https://www.vvdouble.com/products/" + it.id,
@@ -218,11 +243,14 @@ const TYPE_LABEL = { new_preview: "新品預告", new_dm: "新品上架", promo_
 const BRAND_RULES = `【品牌】VV DOUBLE 台灣大尺碼女裝。slogan「大尺碼不是特例，而是我的日常」。核心：棉花糖女孩穿得好看是日常，衣服配合人，不是人配合衣服。
 
 【鐵律：絕不販賣身材焦慮】
-禁用：顯胖、遮肉、藏肉、修飾缺點、穿不下、不敢穿、被說、肉肉的困擾；「顯瘦」不能當主賣點。
+禁用：顯胖、遮肉、藏肉、修飾缺點、穿不下、不敢穿、被說、肉肉的困擾；「顯瘦」不能當主賣點或第一行，放在詳述裡提一次可以；順身、修身、合身這類詞可以用。
 不用缺乏感、自卑感當 hook，不先戳痛點再給解法；一律從正面感受出發：舒服、好看、合身、想天天穿。
 
 【鐵律：只說自己，不比較】
 不提競品、不用對比或貶低拉抬自己，不寫「不是放大版」這類句子；只對 VV DOUBLE 做肯定句。
+
+【鐵律：文案內不寫價格】
+不寫售價、折後價、NT$ 任何金額；價格讓客人到商品頁看。活動機制（幾折、滿額折多少）可以寫，單品價格不行。
 
 【鐵律：不做負面行銷、不做飢餓行銷】
 不寫「再不買就沒了」「最後 N 件」「錯過等明年」「手慢無」這種製造焦慮的句子。
@@ -243,7 +271,7 @@ emoji 可以用：一行最多 1 個，整則 3～5 個，放行首或行尾，�
 空一行
 詳述 3～5 行：每行 18 字內
 空一行
-客人會想知道的：商品全名（原樣不改字）／尺寸（用「 / 」串）／ITEMS→ 單品網址／MODEL 資訊（有提供才寫，格式「model：163/86 穿 XL2L」）
+客人會想知道的：商品全名（原樣不改字）／尺寸（照後台規格原樣，用「 / 」串）／ITEMS→ 單品網址／MODEL 資訊（商品資料有附才寫，每位 model 一行，格式「model VV 154/92 穿 F」；指定了主要 model 就只寫那一位；沒附就不寫）
 空一行
 hashtag 一定在最後（避免粉絲點 hashtag 不點網址）：#VVDOUBLE #大尺碼不是特例 #肉肉女孩 再加 2 個跟商品有關的
 多款商品：每款各一組「商品全名／尺寸／ITEMS→」，中間空一行。沒有商品資料就省略那段。
@@ -462,7 +490,10 @@ exports.fbpost = onRequest(
         // ----- 文案 -----
         case "copy": {
           const { products = [], type = "new", extra = "", catLinks = [], model = "" } = body;
-          const desc = products.map((p) => `【${p.title}】售價 NT$${p.priceSale || p.price || "—"}${p.colors && p.colors.length ? "，顏色：" + p.colors.join("/") : ""}${p.sizes && p.sizes.length ? "，尺寸：" + p.sizes.join(" / ") : ""}\n商品網址：${p.link || p.url || ""}\n${(p.description || "").slice(0, 600)}`).join("\n\n");
+          const desc = products.map((p) => {
+            const ms = (p.models || []).map((x) => `model ${x.name} ${x.height}/${x.weight} 穿 ${x.size}${x.feel ? "（" + x.feel + "）" : ""}`).join("；");
+            return `【${p.title}】${p.colors && p.colors.length ? "顏色：" + p.colors.join("/") : ""}${p.sizes && p.sizes.length ? "　尺寸：" + p.sizes.join(" / ") : ""}${p.material ? "　材質：" + p.material : ""}\n商品網址：${p.link || p.url || ""}\n${ms ? "MODEL 資訊：" + ms + "\n" : ""}${(p.description || "").slice(0, 600)}`;
+          }).join("\n\n");
           const cats = catLinks.map((c) => `${c.name}→ ${c.url}`).join("\n");
           const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}\n可用的分類連結（第 3 行只能從這裡挑）：\n${cats || "（無）"}\n\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫，第 3 行仍放分類連結）"}`;
           const text = await claude(cfg, copySystem(cfg, type), user);

@@ -236,8 +236,7 @@
     <div class="acts" id="acts"></div>
     <div class="row" style="margin:8px 0">
       <input type="text" id="extra" placeholder="這次要強調的點（選填）">
-      <select id="model"><option value="">model</option><option value="亮亮 163/86">亮亮 163/86</option><option value="VVN 154/92">VVN 154/92</option><option value="邢芹 168/49">邢芹 168/49</option></select>
-      <input type="text" id="modelSize" placeholder="穿的尺寸" size="6">
+      <select id="model"><option value="">主要 model（全部）</option></select>
       <button id="copyBtn" class="p">AI 產 3 版</button>
       <button id="symToggle">符號</button>
     </div>
@@ -664,7 +663,14 @@ async function dbxFind(title){
     else { await dbxLoad(S.dbxPath || S.dbxRoot); say($('#pubMsg'), 'Dropbox 找不到這款的資料夾（掃了 ' + (r.total || 0) + ' 個資料夾），請手動點選', 'err'); }
   } catch (e) { say($('#pubMsg'), e.message, 'err'); dbxLoad(S.dbxPath || S.dbxRoot); }
 }
+function renderModels(){
+  var sel = $('#model'), cur = sel.value, names = [];
+  S.selected.forEach(function(p){ (p.models || []).forEach(function(m){ if (names.indexOf(m.name) < 0) names.push(m.name); }); });
+  sel.innerHTML = '<option value="">主要 model（全部）</option>' + names.map(function(n){ return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+  if (names.indexOf(cur) >= 0) sel.value = cur;
+}
 function renderChips(){
+  renderModels();
   $('#chips').innerHTML = S.selected.map(function(p){ return '<span class="chip"><i data-f="' + esc(p.title) + '" style="cursor:pointer;font-style:normal" title="開啟 Dropbox 資料夾">📁</i> ' + esc(p.sku || p.title) + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
   $$('#chips b').forEach(function(b){ b.addEventListener('click', function(){ toggleProd({ id: b.dataset.id }); }); });
   $$('#chips i').forEach(function(b){ b.addEventListener('click', function(){ dbxFind(b.dataset.f); }); });
@@ -847,8 +853,8 @@ $('#copyBtn').addEventListener('click', async function(){
     var lines = (S.cfg.catLinks || '').split('\n');
     for (var i = 0; i < lines.length; i++) { var pr = lines[i].split('|'); if (pr.length >= 2 && pr[1].trim()) cats.push({ name: pr[0].trim(), url: await shortLink(pr[1].trim()) }); }
     var prods = [];
-    for (var j = 0; j < S.selected.length; j++) { var p = S.selected[j]; prods.push({ title: p.title, price: p.price, priceSale: p.priceSale, colors: p.colors, sizes: p.sizes, description: p.description, link: await shortLink(p.url) }); }
-    var model = $('#model').value ? ($('#model').value + ($('#modelSize').value ? ' 穿 ' + $('#modelSize').value.trim() : '')) : '';
+    for (var j = 0; j < S.selected.length; j++) { var p = S.selected[j]; prods.push({ title: p.title, colors: p.colors, sizes: p.sizes, material: p.material, models: p.models, description: p.description, link: await shortLink(p.url) }); }
+    var model = $('#model').value ? '主要 model 是 ' + $('#model').value + '，MODEL 資訊只寫這一位' : '';
     var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
     $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
     $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); }); });
@@ -913,7 +919,7 @@ function renderPreview(){
 function slotData(status){
   return {
     type: S.type, status: status, message: $('#msg').value, extra: $('#extra').value, link: $('#linkSel').value, linkCustom: $('#linkCustom').value, shortUrl: S.shortUrl,
-    products: S.selected.map(function(p){ return { id: p.id, title: p.title, sku: p.sku, price: p.price, priceSale: p.priceSale, url: p.url, images: p.images, detailImages: p.detailImages, colors: p.colors, description: (p.description || '').slice(0, 600) }; }),
+    products: S.selected.map(function(p){ return { id: p.id, title: p.title, sku: p.sku, price: p.price, priceSale: p.priceSale, url: p.url, images: p.images, detailImages: p.detailImages, colors: p.colors, sizes: p.sizes || [], material: p.material || '', models: p.models || [], description: (p.description || '').slice(0, 600) }; }),
     skus: S.selected.map(function(p){ return p.sku; }),
     images: S.images.map(function(im){ return { key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.src === 'sl' ? im.orig : (im.orig ? 'dbx' : ''), lab: im.lab || null }; }),
     thumb: (S.images[0] && (S.images[0].thumb || '')) || '', by: $('#who').value, at: $('#at').value
