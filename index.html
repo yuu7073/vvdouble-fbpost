@@ -236,6 +236,8 @@
     <div class="acts" id="acts"></div>
     <div class="row" style="margin:8px 0">
       <input type="text" id="extra" placeholder="這次要強調的點（選填）">
+      <select id="model"><option value="">model</option><option value="亮亮 163/86">亮亮 163/86</option><option value="VVN 154/92">VVN 154/92</option><option value="邢芹 168/49">邢芹 168/49</option></select>
+      <input type="text" id="modelSize" placeholder="穿的尺寸" size="6">
       <button id="copyBtn" class="p">AI 產 3 版</button>
       <button id="symToggle">符號</button>
     </div>
@@ -844,7 +846,8 @@ $('#copyBtn').addEventListener('click', async function(){
     for (var i = 0; i < lines.length; i++) { var pr = lines[i].split('|'); if (pr.length >= 2 && pr[1].trim()) cats.push({ name: pr[0].trim(), url: await shortLink(pr[1].trim()) }); }
     var prods = [];
     for (var j = 0; j < S.selected.length; j++) { var p = S.selected[j]; prods.push({ title: p.title, price: p.price, priceSale: p.priceSale, colors: p.colors, sizes: p.sizes, description: p.description, link: await shortLink(p.url) }); }
-    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
+    var model = $('#model').value ? ($('#model').value + ($('#modelSize').value ? ' 穿 ' + $('#modelSize').value.trim() : '')) : '';
+    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
     $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
     $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); }); });
     if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); }
