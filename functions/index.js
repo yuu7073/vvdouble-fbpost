@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25l";
+const VERSION = "2026-10-25m";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -215,47 +215,58 @@ async function claude(cfg, system, user) {
 
 const TYPE_LABEL = { new_preview: "新品預告", new_dm: "新品上架", promo_dm: "活動DM", weekly: "當周活動", hero: "主推商品", staff: "店員實穿", store: "門市陳列", reels_item: "單品影片", reels_brand: "形象影片", new: "新品上架", restock: "補貨", promo: "活動優惠", outfit: "穿搭", link: "活動連結" };
 
-// 三種取向（依貼文類型）
-const ORIENT = {
-  new:   `【新品介紹】1 合乎當週主題的氣氛文案（季節、場合、心情）2 當週活動一句 3 主打商品直購連結。賣點段落用「材質／版型／怎麼搭」各一行。`,
-  hero:  `【主打商品】1 簡而有力形容這件（第一行就是主旨，像「小編來示範推薦清單🛒」「這條我穿了一週」）2 搭配的行銷活動一句 3 賣點 3～4 行 4 MODEL 資訊／穿什麼 SIZE（有提供才寫，格式「model：163/86 穿 XL2L」）。`,
-  promo: `【行銷大活動】有趣味的口吻、聳動的標題；第一行用【　】把活動名框起來（例【1111購物慶典 ♥ 任選49折】），第二行講活動最大的好處或期間（只有特賣會／大折數活動才可以寫倒數、現貨提醒），第三行網址。賣點段落換成活動機制 2～3 行，每行一個 emoji 開頭。`,
-  life:  `【實穿／門市／影片】像在聊天：一句畫面感的開場、一句真實感受、第三行網址；中段 2～3 行講這套怎麼搭、什麼身形穿起來的感覺；有 MODEL 資訊就寫一行「model：身高/體重 穿 SIZE」。`,
-};
-function orientFor(type) {
-  if (/^new_|^new$|restock/.test(type)) return ORIENT.new;
-  if (/promo|weekly|link/.test(type)) return ORIENT.promo;
-  if (/staff|store|reels|outfit/.test(type)) return ORIENT.life;
-  return ORIENT.hero;
-}
+const BRAND_RULES = `【品牌】VV DOUBLE 台灣大尺碼女裝。slogan「大尺碼不是特例，而是我的日常」。核心：棉花糖女孩穿得好看是日常，衣服配合人，不是人配合衣服。
 
-function copySystem(cfg, type) {
-  return `你是台灣大尺碼女裝品牌 VV DOUBLE 的 Facebook 粉專小編。
-品牌 slogan「大尺碼不是特例，而是我的日常」。核心：棉花糖女孩穿得好看是日常，衣服配合人，不是人配合衣服。
+【鐵律：絕不販賣身材焦慮】
+禁用：顯胖、遮肉、藏肉、修飾缺點、穿不下、不敢穿、被說、肉肉的困擾；「顯瘦」不能當主賣點。
+不用缺乏感、自卑感當 hook，不先戳痛點再給解法；一律從正面感受出發：舒服、好看、合身、想天天穿。
 
-【寫法】生動輕快活潑，像懂穿搭的姐妹在講話。精準、有 hook、有內容。
-每句都要有畫面或資訊，沒有的就刪。不要鋪陳、不要解釋、不要總結、不要客套。
-不可以：破折號（— 或 ——）、「寶寶們」「姐妹們」開頭、驚嘆號連發、「點擊連結」「快來看看」「不容錯過」「無論…還是…」「不只是…更是…」這類制式句、任何對比或貶低的說法、顯胖／遮肉／藏肉／修飾缺點（「顯瘦」不能當主賣點）。
-絕對不販賣焦慮：不講「穿不下」「不敢穿」「被說」「肉肉的困擾」這種先戳痛點再給解法的寫法，不用缺乏感或自卑感當 hook，一律從「穿上去很好看、很舒服、很想天天穿」這種正面感受出發。
-不做負面行銷、不做飢餓行銷：不寫「再不買就沒了」「最後 N 件」「錯過等明年」「手慢無」這種製造焦慮的句子，不拿身材焦慮當 hook。只有「特賣會／大折數活動」這類貼文可以寫倒數和現貨提醒，而且要寫成明確資訊（活動到幾號、售完不補）而不是催促。
-emoji 可以用，一行最多 1 個，整則 3～5 個，放在行首或行尾，增加親切感。
-句子短，一句一行，行內用空格代替逗號，行尾幾乎不加標點。
+【鐵律：只說自己，不比較】
+不提競品、不用對比或貶低拉抬自己，不寫「不是放大版」這類句子；只對 VV DOUBLE 做肯定句。
 
-【編排邏輯：重點 → 網址 → 詳述 → 客人會想知道的資訊 → hashtag】
-手機 3 行後就會被折疊成「查看更多」，所以前 3 行要把重點和網址放完：
+【鐵律：不做負面行銷、不做飢餓行銷】
+不寫「再不買就沒了」「最後 N 件」「錯過等明年」「手慢無」這種製造焦慮的句子。
+只有特賣會／大折數活動可以寫倒數與現貨提醒，而且要寫成明確資訊（活動到幾號、售完不補），不是催促。
+
+【寫法】
+生動輕快活潑，像懂穿搭的姐妹在講話；精準、有 hook、有內容。每句都要有畫面或資訊，沒有的就刪。
+不鋪陳、不解釋、不總結、不客套、不落落長。
+禁止：破折號（— 或 ——）、「寶寶們」「姐妹們」開頭、驚嘆號連發、「點擊連結」「快來看看」「不容錯過」「無論…還是…」「不只是…更是…」這類制式句、任何讀起來像 AI 的套話。
+emoji 可以用：一行最多 1 個，整則 3～5 個，放行首或行尾，增加親切感。
+句子短，一句一行；行內用空格代替逗號，行尾幾乎不加標點。
+
+【編排邏輯：重點 → 網址 → 詳述 → 客人會想知道的 → hashtag】
+手機 3 行後會折疊成「查看更多」，前 3 行要把重點和網址放完：
 第 1 行：主旨／hook（15 字內）
 第 2 行：接續一句（15 字內）
-第 3 行：「名稱→ 網址」，從提供的分類連結挑 1～2 個（兩個就各一行）；這裡絕對不放單品網址
+第 3 行：「名稱→ 網址」，從分類連結挑 1～2 個（兩個就各一行）；這裡絕對不放單品網址（跳出率高）
 空一行
 詳述 3～5 行：每行 18 字內
 空一行
-客人會想知道的：商品全名（原樣不改字）／尺寸（用「 / 」串）／ITEMS→ 單品網址／MODEL 資訊（有才寫）
+客人會想知道的：商品全名（原樣不改字）／尺寸（用「 / 」串）／ITEMS→ 單品網址／MODEL 資訊（有提供才寫，格式「model：163/86 穿 XL2L」）
 空一行
-hashtag 一定在最後：#VVDOUBLE #大尺碼不是特例 #肉肉女孩 再加 2 個跟商品有關的
+hashtag 一定在最後（避免粉絲點 hashtag 不點網址）：#VVDOUBLE #大尺碼不是特例 #肉肉女孩 再加 2 個跟商品有關的
 多款商品：每款各一組「商品全名／尺寸／ITEMS→」，中間空一行。沒有商品資料就省略那段。
 
-【這篇的取向】${orientFor(type)}
-${cfg.copyRules ? "【額外規則】" + cfg.copyRules : ""}
+【取向：依貼文類型】
+新品介紹：1 合乎當週主題的氣氛文案 2 當週活動一句 3 主打商品直購連結；詳述用材質／版型／怎麼搭各一行。
+主打商品：1 簡而有力形容這件（第一行就是主旨，像「小編來示範推薦清單🛒」）2 搭配的行銷活動一句 3 詳述 3～4 行 4 MODEL 資訊／穿什麼 SIZE。
+行銷大活動：有趣味的口吻、聳動的標題；第一行用【　】框活動名，第二行講活動最大的好處或期間，第三行網址；詳述換成活動機制 2～3 行，每行一個 emoji 開頭。
+實穿／門市／影片：像在聊天，一句畫面感開場、一句真實感受、第三行網址；中段 2～3 行講怎麼搭、穿起來的感覺。`;
+
+function orientName(type) {
+  if (/^new_|^new$|restock/.test(type)) return "新品介紹";
+  if (/promo|weekly|link/.test(type)) return "行銷大活動";
+  if (/staff|store|reels|outfit/.test(type)) return "實穿／門市／影片";
+  return "主打商品";
+}
+function copySystem(cfg, type) {
+  return `你是 VV DOUBLE 的 Facebook 粉專小編。以下規則全部要遵守，沒有例外。
+
+${cfg.brandRules || BRAND_RULES}
+
+這一篇的取向：${orientName(type)}
+${cfg.copyRules ? "額外規則：" + cfg.copyRules : ""}
 輸出：恰好 3 個版本，第 1 版最精簡、第 3 版最有故事感，用「===」分隔，不加編號、不加標題、不加任何說明。`;
 }
 
@@ -296,6 +307,8 @@ exports.fbpost = onRequest(
             claude: !!cfg.anthropicKey,
             claudeModel: cfg.claudeModel || "",
             copyRules: cfg.copyRules || "",
+            brandRules: cfg.brandRules || "",
+            brandRulesDefault: BRAND_RULES,
             catLinks: cfg.catLinks || "view all pants|https://www.vvdouble.com/categories/view-all-bottom\nview all tops|https://www.vvdouble.com/categories/view-all-top\nNew|https://www.vvdouble.com/categories/newin",
             utmSource: cfg.utmSource || "fb",
             utmMedium: cfg.utmMedium || "ad",
@@ -310,7 +323,7 @@ exports.fbpost = onRequest(
 
         case "setup": {
           // 只更新有送來的欄位；空字串代表不改
-          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "reurlKey", "scheduleSheet", "scheduleYear", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "catLinks", "utmSource", "utmMedium", "newPassword"];
+          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "reurlKey", "scheduleSheet", "scheduleYear", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "brandRules", "catLinks", "utmSource", "utmMedium", "newPassword"];
           const upd = {};
           for (const k of allow) {
             if (typeof body[k] === "string" && body[k].trim() !== "") upd[k === "newPassword" ? "password" : k] = body[k].trim();

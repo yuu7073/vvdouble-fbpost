@@ -343,7 +343,8 @@
       <label>Shopline Token</label><input type="password" id="sSl" placeholder="留空＝不更動"><span></span>
       <label>Claude API Key</label><input type="password" id="sAi" placeholder="留空＝不更動"><span></span>
       <label>模型</label><input type="text" id="sModel" placeholder="claude-sonnet-4-6"><span></span>
-      <label>文案補充規則</label><textarea id="sRules" style="min-height:70px"></textarea><span></span>
+      <label>品牌文案鐵律</label><textarea id="sBrand" style="min-height:260px;font-size:12px;line-height:1.5"></textarea><button id="brandReset" class="sm">還原預設</button>
+      <label>額外規則</label><textarea id="sRules" style="min-height:60px"></textarea><span></span>
       <label>分類連結</label><textarea id="sCats" style="min-height:70px" placeholder="名稱|網址，一行一個"></textarea><span></span>
       <label>reurl API Key</label><input type="password" id="sReurl" placeholder="留空＝不更動"><span></span>
     </div>
@@ -470,7 +471,7 @@ async function loadStatus(){
     $('#conn').textContent = '已連線'; $('#ver').textContent = s.version;
     [['dMeta','meta'],['dDbx','dropbox'],['dSl','shopline'],['dAi','claude'],['dRe','reurl']].forEach(function(p){ $('#' + p[0]).className = 'dot' + (s[p[1]] ? ' on' : ''); });
     $('#sPage').value = s.pageId; $('#sDbxKey').value = s.dropboxAppKey; $('#sDbxRoot').value = s.dropboxRoot; $('#sDbxStaff').value = s.dropboxStaff || '';
-    $('#sModel').value = s.claudeModel; $('#sRules').value = s.copyRules; $('#sCats').value = s.catLinks || ''; $('#sUtmS').value = s.utmSource; $('#sUtmM').value = s.utmMedium;
+    $('#sModel').value = s.claudeModel; $('#sRules').value = s.copyRules; $('#sCats').value = s.catLinks || ''; $('#sBrand').value = s.brandRules || s.brandRulesDefault || ''; S.brandDefault = s.brandRulesDefault || ''; $('#sUtmS').value = s.utmSource; $('#sUtmM').value = s.utmMedium;
     $('#sSheet').value = s.scheduleSheet || ''; $('#sYear').value = s.scheduleYear || ''; $('#svcEmail').textContent = s.serviceEmail || '';
     $('#dbxState').textContent = s.dropbox ? '已授權' : '尚未授權';
     S.dbxRoot = s.dropboxRoot || ''; if (!S.dbxPath) S.dbxPath = S.dbxRoot;
@@ -482,7 +483,7 @@ $('#saveSet').addEventListener('click', async function(){
   try {
     var r = await api('setup', {
       pageId: $('#sPage').value, metaToken: $('#sMeta').value, dropboxAppKey: $('#sDbxKey').value, dropboxRoot: $('#sDbxRoot').value, dropboxStaff: $('#sDbxStaff').value,
-      shoplineToken: $('#sSl').value, anthropicKey: $('#sAi').value, claudeModel: $('#sModel').value, copyRules: $('#sRules').value, catLinks: $('#sCats').value, reurlKey: $('#sReurl').value,
+      shoplineToken: $('#sSl').value, anthropicKey: $('#sAi').value, claudeModel: $('#sModel').value, copyRules: $('#sRules').value, brandRules: $('#sBrand').value, catLinks: $('#sCats').value, reurlKey: $('#sReurl').value,
       scheduleSheet: $('#sSheet').value, scheduleYear: $('#sYear').value, utmSource: $('#sUtmS').value, utmMedium: $('#sUtmM').value, newPassword: $('#sNewPw').value,
       templates: S.tpl || null
     });
@@ -491,6 +492,7 @@ $('#saveSet').addEventListener('click', async function(){
     say(m, r.first ? '密碼已建立，請再按一次儲存寫入其他設定' : '已儲存', 'ok'); loadStatus();
   } catch (e) { say(m, e.message, 'err'); }
 });
+$('#brandReset').addEventListener('click', function(){ $('#sBrand').value = S.brandDefault || ''; });
 $('#metaCheck').addEventListener('click', async function(){
   var m = $('#setMsg');
   try { var r = await api('metaCheck'); say(m, r.ok ? ('粉專：' + r.page.name + '（' + r.page.fan_count + ' 人按讚）') : r.error, r.ok ? 'ok' : 'err'); } catch (e) { say(m, e.message, 'err'); }
