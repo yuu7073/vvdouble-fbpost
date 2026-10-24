@@ -130,9 +130,15 @@
       <button data-v="restock">補貨</button>
       <button data-v="promo">活動</button>
       <button data-v="outfit">穿搭</button>
+      <button data-v="staff">實穿</button>
       <button data-v="link">活動連結</button>
     </div>
-    <span class="muted" id="specTxt" style="margin-left:10px"></span>
+    <select id="ratio" style="margin-left:10px">
+      <option value="h">橫式 1200×800</option>
+      <option value="v">直式 1080×1350</option>
+      <option value="s">方形 1080×1080</option>
+      <option value="b">banner 1200×630</option>
+    </select>
   </div>
 
   <div class="card">
@@ -170,7 +176,7 @@
     <div class="row">
       <select id="linkSel"></select>
       <input type="text" id="linkCustom" placeholder="自訂網址" class="hide">
-      <select id="medium"><option value="post">post</option><option value="ad">ad</option></select>
+      <select id="medium"><option value="ad">ad</option><option value="story">story</option><option value="post">post</option></select>
       <button id="insLink">插入文案</button>
     </div>
     <div class="link" id="linkOut"></div>
@@ -181,6 +187,7 @@
     <div class="row">
       <div class="seg" id="when"><button data-v="now" class="on">立即</button><button data-v="later">排程</button></div>
       <input type="datetime-local" id="at" class="hide">
+      <div class="seg hide" id="slots"><button data-v="12:00">12:00</button><button data-v="12:30">12:30</button><button data-v="20:00">20:00</button></div>
       <span class="muted" id="atHint"></span>
     </div>
   </div>
@@ -251,6 +258,7 @@
     <div class="set">
       <label>App Key</label><input type="text" id="sDbxKey"><span></span>
       <label>根目錄</label><input type="text" id="sDbxRoot" placeholder="/VV DOUBLE TEAM 團隊資料夾/官網部門"><span></span>
+      <label>實穿素材資料夾</label><input type="text" id="sDbxStaff" placeholder="/…/素材/可用"><span></span>
       <label>授權</label><span id="dbxState" class="muted"></span><button id="dbxConnect">連接 Dropbox</button>
     </div>
   </div>
@@ -267,7 +275,7 @@
     <h2>UTM ／ 密碼</h2>
     <div class="set">
       <label>utm_source</label><input type="text" id="sUtmS" placeholder="fb"><span></span>
-      <label>預設 utm_medium</label><input type="text" id="sUtmM" placeholder="post"><span></span>
+      <label>預設 utm_medium</label><input type="text" id="sUtmM" placeholder="ad"><span></span>
       <label>更改工具密碼</label><input type="password" id="sNewPw" placeholder="留空＝不更動"><span></span>
     </div>
     <div class="row" style="margin-top:12px"><button id="saveSet" class="p">儲存設定</button><span class="muted">第一次使用：上方密碼欄輸入要設定的密碼後按儲存</span></div>
@@ -286,15 +294,12 @@ var S = {
   type: 'new', imgSrc: 'dbx', noCrop: false,
   dbxPath: '', dbxRoot: '', dbxFolders: [], dbxFiles: [], slFiles: [],
   images: [],                            // {key,name,src:'dbx'|'sl',path|url,thumb,b64,mime,w,h}
-  when: 'now', cfg: {}, medium: 'post'
+  when: 'now', cfg: {}, medium: 'ad'
 };
-var SPEC = {
-  new:     { w:1080, h:1350, label:'直式 4:5（1080×1350）' },
-  restock: { w:1080, h:1350, label:'直式 4:5（1080×1350）' },
-  outfit:  { w:1080, h:1350, label:'直式 4:5（1080×1350）' },
-  promo:   { w:1080, h:1080, label:'方形 1:1（1080×1080）' },
-  link:    { w:1200, h:630,  label:'橫式 banner（1200×630）' }
-};
+var RATIO = { h:{w:1200,h:800,label:'橫式 1200×800'}, v:{w:1080,h:1350,label:'直式 1080×1350'}, s:{w:1080,h:1080,label:'方形 1080×1080'}, b:{w:1200,h:630,label:'banner 1200×630'} };
+var TYPE_RATIO = { new:'h', restock:'h', promo:'s', outfit:'v', staff:'v', link:'b' };
+var SPEC = {};
+function spec(){ return RATIO[$('#ratio').value] || RATIO.h; }
 
 // ---------- 共用 ----------
 async function api(action, data){
@@ -342,11 +347,11 @@ async function loadStatus(){
     $('#dDbx').className = 'dot' + (s.dropbox ? ' on' : '');
     $('#dSl').className = 'dot' + (s.shopline ? ' on' : '');
     $('#dAi').className = 'dot' + (s.claude ? ' on' : '');
-    $('#sPage').value = s.pageId; $('#sDbxKey').value = s.dropboxAppKey; $('#sDbxRoot').value = s.dropboxRoot;
+    $('#sPage').value = s.pageId; $('#sDbxKey').value = s.dropboxAppKey; $('#sDbxRoot').value = s.dropboxRoot; $('#sDbxStaff').value = s.dropboxStaff || '';
     $('#sModel').value = s.claudeModel; $('#sRules').value = s.copyRules; $('#sUtmS').value = s.utmSource; $('#sUtmM').value = s.utmMedium;
     $('#dbxState').textContent = s.dropbox ? '已授權' : '尚未授權';
     S.dbxRoot = s.dropboxRoot || '';
-    S.medium = s.utmMedium || 'post'; $('#medium').value = S.medium;
+    S.medium = s.utmMedium || 'ad'; $('#medium').value = S.medium;
     if (!S.dbxPath) { S.dbxPath = S.dbxRoot; }
     if (s.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
     renderLink();
@@ -358,7 +363,7 @@ $('#saveSet').addEventListener('click', async function(){
   var m = $('#setMsg');
   try {
     var r = await api('setup', {
-      pageId: $('#sPage').value, metaToken: $('#sMeta').value, dropboxAppKey: $('#sDbxKey').value, dropboxRoot: $('#sDbxRoot').value,
+      pageId: $('#sPage').value, metaToken: $('#sMeta').value, dropboxAppKey: $('#sDbxKey').value, dropboxRoot: $('#sDbxRoot').value, dropboxStaff: $('#sDbxStaff').value,
       shoplineToken: $('#sSl').value, anthropicKey: $('#sAi').value, claudeModel: $('#sModel').value, copyRules: $('#sRules').value,
       utmSource: $('#sUtmS').value, utmMedium: $('#sUtmM').value, newPassword: $('#sNewPw').value
     });
@@ -431,9 +436,11 @@ function renderChips(){
 // ---------- ❷ 類型 ----------
 $$('#types button').forEach(function(b){ b.addEventListener('click', function(){
   $$('#types button').forEach(function(x){ x.classList.toggle('on', x === b); });
-  S.type = b.dataset.v; updateSpec(); reprocessAll();
+  S.type = b.dataset.v; $('#ratio').value = TYPE_RATIO[S.type] || 'h'; updateSpec(); reprocessAll();
+  if (S.type === 'staff' && S.cfg.dropboxStaff) dbxLoad(S.cfg.dropboxStaff);
 }); });
-function updateSpec(){ $('#specTxt').textContent = SPEC[S.type].label; $('#imgHint').textContent = S.noCrop ? '維持原比例' : '自動裁成 ' + SPEC[S.type].label; }
+$('#ratio').addEventListener('change', function(){ updateSpec(); reprocessAll(); });
+function updateSpec(){ $('#imgHint').textContent = S.noCrop ? '維持原比例' : '自動裁成 ' + spec().label; }
 $('#noCrop').addEventListener('change', function(){ S.noCrop = $('#noCrop').checked; updateSpec(); reprocessAll(); });
 updateSpec();
 
@@ -519,7 +526,7 @@ function processImage(im, srcUrl){
     var img = new Image(); img.crossOrigin = 'anonymous';
     img.onload = function(){
       try {
-        var sp = SPEC[S.type], c = document.createElement('canvas'), ctx = c.getContext('2d');
+        var sp = spec(), c = document.createElement('canvas'), ctx = c.getContext('2d');
         if (S.noCrop) {
           var k = Math.min(1, 2048 / Math.max(img.width, img.height));
           c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
@@ -582,7 +589,7 @@ function currentLink(){
   try {
     var u = new URL(base);
     u.searchParams.set('utm_source', S.cfg.utmSource || 'fb');
-    u.searchParams.set('utm_medium', S.medium || 'post');
+    u.searchParams.set('utm_medium', S.medium || 'ad');
     u.searchParams.set('utm_campaign', utmCampaign(publishTs()));
     return u.toString();
   } catch (e) { return ''; }
@@ -601,11 +608,18 @@ renderLinkOptions();
 // ---------- ❻ 時間 ----------
 $$('#when button').forEach(function(b){ b.addEventListener('click', function(){
   $$('#when button').forEach(function(x){ x.classList.toggle('on', x === b); });
-  S.when = b.dataset.v; $('#at').classList.toggle('hide', S.when !== 'later');
+  S.when = b.dataset.v; $('#at').classList.toggle('hide', S.when !== 'later'); $('#slots').classList.toggle('hide', S.when !== 'later');
   if (S.when === 'later' && !$('#at').value) { var d = new Date(Date.now() + 3600000); d.setMinutes(0); $('#at').value = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':00'; }
   renderLink(); renderPreview();
 }); });
 $('#at').addEventListener('change', function(){ renderLink(); renderPreview(); });
+$$('#slots button').forEach(function(b){ b.addEventListener('click', function(){
+  var base = $('#at').value ? new Date($('#at').value) : new Date();
+  var d = new Date(base.getFullYear(), base.getMonth(), base.getDate(), Number(b.dataset.v.split(':')[0]), Number(b.dataset.v.split(':')[1]));
+  if (d.getTime() < Date.now() + 10 * 60000) d.setDate(d.getDate() + 1);
+  $('#at').value = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  renderLink(); renderPreview();
+}); });
 
 // ---------- 預覽／發布 ----------
 function renderPreview(){
@@ -649,7 +663,7 @@ async function loadList(){
     var r = await api('listPosts', { n: 200 });
     tb.innerHTML = r.posts.map(function(p){
       var st = p.status === 'scheduled' ? '<span class="tag s">排程 ' + fmt(p.scheduledAt) + '</span>' : p.status === 'deleted' ? '<span class="tag x">已刪</span>' : '<span class="tag p">已發布</span>';
-      return '<tr><td>' + fmt(p.createdAt) + '<div class="muted">' + esc(p.by || '') + '</div></td><td>' + st + '</td><td>' + esc({new:'新品',restock:'補貨',promo:'活動',outfit:'穿搭',link:'連結'}[p.type] || p.type) + '</td><td>' + esc((p.skus || []).join('、')) + '</td><td class="muted">' + esc((p.message || '').slice(0, 60)) + '</td><td>' + esc(p.utm || '') + '</td><td style="font-family:monospace;font-size:11px">' + esc(p.postId || '') + '</td><td>' + (p.status !== 'deleted' ? '<button class="d" data-id="' + esc(p.id) + '" data-pid="' + esc(p.postId) + '">刪除</button>' : '') + '</td></tr>';
+      return '<tr><td>' + fmt(p.createdAt) + '<div class="muted">' + esc(p.by || '') + '</div></td><td>' + st + '</td><td>' + esc({new:'新品',restock:'補貨',promo:'活動',outfit:'穿搭',staff:'實穿',link:'連結'}[p.type] || p.type) + '</td><td>' + esc((p.skus || []).join('、')) + '</td><td class="muted">' + esc((p.message || '').slice(0, 60)) + '</td><td>' + esc(p.utm || '') + '</td><td style="font-family:monospace;font-size:11px">' + esc(p.postId || '') + '</td><td>' + (p.status !== 'deleted' ? '<button class="d" data-id="' + esc(p.id) + '" data-pid="' + esc(p.postId) + '">刪除</button>' : '') + '</td></tr>';
     }).join('') || '<tr><td colspan="8" class="muted">還沒有紀錄</td></tr>';
     $$('#listBody button').forEach(function(b){ b.addEventListener('click', async function(){
       if (!confirm('從粉專刪除這篇貼文？')) return;

@@ -5,7 +5,7 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25a";
+const VERSION = "2026-10-25b";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -152,7 +152,7 @@ async function claude(cfg, system, user) {
   return (j.content || []).map((c) => c.text || "").join("");
 }
 
-const TYPE_LABEL = { new: "新品上架", restock: "補貨到貨", promo: "活動優惠", outfit: "穿搭靈感", link: "活動連結" };
+const TYPE_LABEL = { new: "新品上架", restock: "補貨到貨", promo: "活動優惠", outfit: "穿搭靈感", staff: "門市店員實穿分享（用店員真實上身的角度寫，提到身形或尺寸怎麼挑）", link: "活動連結" };
 
 function copySystem(cfg) {
   return `你是台灣大尺碼女裝品牌 VV DOUBLE 的 Facebook 粉專小編。
@@ -202,13 +202,14 @@ exports.fbpost = onRequest(
             claudeModel: cfg.claudeModel || "",
             copyRules: cfg.copyRules || "",
             utmSource: cfg.utmSource || "fb",
-            utmMedium: cfg.utmMedium || "post",
+            utmMedium: cfg.utmMedium || "ad",
+            dropboxStaff: cfg.dropboxStaff || "",
           });
         }
 
         case "setup": {
           // 只更新有送來的欄位；空字串代表不改
-          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "utmSource", "utmMedium", "newPassword"];
+          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "utmSource", "utmMedium", "newPassword"];
           const upd = {};
           for (const k of allow) {
             if (typeof body[k] === "string" && body[k].trim() !== "") upd[k === "newPassword" ? "password" : k] = body[k].trim();
