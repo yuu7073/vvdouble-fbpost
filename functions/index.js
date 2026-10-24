@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25h";
+const VERSION = "2026-10-25i";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -121,6 +121,7 @@ function slProduct(it) {
     detailImages: (it.detail_medias || []).map((m) => m.images && m.images.original && m.images.original.url).filter(Boolean),
     description: stripHtml((it.description_translations || {})["zh-hant"] || ""),
     colors: [...new Set(v.map((x) => ((x.fields_translations || [])[0] || {})["zh-hant"] || (x.fields || [])[0] && (x.fields[0]["zh-hant"] || x.fields[0].name) || "").filter(Boolean))],
+    sizes: [...new Set(v.map((x) => ((x.fields_translations || [])[1] || {})["zh-hant"] || (x.fields || [])[1] && (x.fields[1]["zh-hant"] || x.fields[1].name) || "").filter(Boolean))],
     url: "https://www.vvdouble.com/products/" + it.id,
   };
 }
@@ -217,11 +218,25 @@ const TYPE_LABEL = { new: "新品上架", restock: "補貨到貨", promo: "活�
 function copySystem(cfg) {
   return `你是台灣大尺碼女裝品牌 VV DOUBLE 的 Facebook 粉專小編。
 品牌 slogan：「大尺碼不是特例，而是我的日常」。核心精神：棉花糖女孩也有美麗的權利，肉肉女孩穿得好看是日常不是例外。
-尺寸：SM / ML / XL2L / 3L4L / 5L6L。價格帶 NT$490–1,380。
-語氣：像懂穿搭的姐妹在講話，溫暖、具體、有畫面感；描述版型怎麼修飾、怎麼搭，不空喊口號、不用「寶寶們」「姐妹們」這種開頭、不用驚嘆號連發、不用 emoji 刷版（最多 2 個）、不寫「點擊連結」這種制式語。
-每則 120–220 字，繁體中文（台灣用語）。結尾固定帶 hashtag：#VVDOUBLE #大尺碼不是特例 #肉肉女孩，可再加 1–2 個跟商品有關的。
+語氣：像懂穿搭的姐妹在講話，溫暖、具體、有畫面感；描述版型怎麼修飾、怎麼搭。不用「寶寶們」「姐妹們」開頭、不連發驚嘆號、emoji 最多 2 個、不寫「點擊連結」這種制式語。
+句子短，一句一行；行內用空格代替逗號，行尾大多不加標點，整則只有 1～2 個句號。
+
+【固定結構，每一行都要照順序】
+第 1 行：勾人的一句（問句或畫面，15 字內，可帶 1 個 emoji）
+第 2 行：接續的一句（15 字內）
+第 3 行：分類連結，格式「名稱→ 網址」，從提供的分類連結裡挑最貼合的 1～2 個（兩個就各自一行）；絕對不可以放單品網址
+（空一行）
+賣點 3～5 行：材質／版型怎麼修飾／怎麼搭／顏色；每行 18 字內
+（空一行）
+商品全名（原樣，不要改字）
+尺寸（提供的尺寸用「 / 」串起來）
+ITEMS→ 商品網址
+（空一行）
+hashtag：固定 #VVDOUBLE #大尺碼不是特例 #肉肉女孩，再加 2 個跟商品有關的
+
+多款商品時：每款各自一組「商品全名／尺寸／ITEMS→」，中間空一行。沒有商品資料時省略商品那段。
 ${cfg.copyRules ? "額外規則：" + cfg.copyRules : ""}
-輸出格式：恰好 3 個版本，用「===」分隔，不加編號、不加標題、不加任何說明。`;
+輸出：恰好 3 個版本，用「===」分隔，不加編號、不加標題、不加任何說明。`;
 }
 
 // ---------- 主程式 ----------
@@ -261,6 +276,7 @@ exports.fbpost = onRequest(
             claude: !!cfg.anthropicKey,
             claudeModel: cfg.claudeModel || "",
             copyRules: cfg.copyRules || "",
+            catLinks: cfg.catLinks || "view all pants|https://www.vvdouble.com/categories/view-all-bottom\nview all tops|https://www.vvdouble.com/categories/view-all-top\nNew|https://www.vvdouble.com/categories/newin",
             utmSource: cfg.utmSource || "fb",
             utmMedium: cfg.utmMedium || "ad",
             dropboxStaff: cfg.dropboxStaff || "",
@@ -274,7 +290,7 @@ exports.fbpost = onRequest(
 
         case "setup": {
           // 只更新有送來的欄位；空字串代表不改
-          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "reurlKey", "scheduleSheet", "scheduleYear", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "utmSource", "utmMedium", "newPassword"];
+          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "reurlKey", "scheduleSheet", "scheduleYear", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "catLinks", "utmSource", "utmMedium", "newPassword"];
           const upd = {};
           for (const k of allow) {
             if (typeof body[k] === "string" && body[k].trim() !== "") upd[k === "newPassword" ? "password" : k] = body[k].trim();
@@ -388,9 +404,10 @@ exports.fbpost = onRequest(
 
         // ----- 文案 -----
         case "copy": {
-          const { products = [], type = "new", extra = "", link = "" } = body;
-          const desc = products.map((p) => `【${p.title}】售價 NT$${p.priceSale || p.price || "—"}${p.colors && p.colors.length ? "，顏色：" + p.colors.join("/") : ""}\n${(p.description || "").slice(0, 600)}`).join("\n\n");
-          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${link ? "文末放這個連結（原樣貼上、單獨一行、放在 hashtag 之前）：" + link + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
+          const { products = [], type = "new", extra = "", catLinks = [] } = body;
+          const desc = products.map((p) => `【${p.title}】售價 NT$${p.priceSale || p.price || "—"}${p.colors && p.colors.length ? "，顏色：" + p.colors.join("/") : ""}${p.sizes && p.sizes.length ? "，尺寸：" + p.sizes.join(" / ") : ""}\n商品網址：${p.link || p.url || ""}\n${(p.description || "").slice(0, 600)}`).join("\n\n");
+          const cats = catLinks.map((c) => `${c.name}→ ${c.url}`).join("\n");
+          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}\n可用的分類連結（第 3 行只能從這裡挑）：\n${cats || "（無）"}\n\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫，第 3 行仍放分類連結）"}`;
           const text = await claude(cfg, copySystem(cfg), user);
           const variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
           return res.json({ variants });
