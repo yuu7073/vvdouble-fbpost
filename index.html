@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VV DOUBLE · FB 貼文</title>
+<style>
+  :root{--ink:#1d2433;--mute:#6b7280;--line:#e3e6ec;--bg:#f4f5f8;--card:#fff;--acc:#1877f2;--acc2:#e8f0fe;--warn:#c62828;--ok:#1b8f4a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Noto Sans TC",-apple-system,"Segoe UI","Microsoft JhengHei",sans-serif}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:5}
+  header h1{font-size:16px;margin:0 12px 0 0;letter-spacing:.5px}
+  header .sp{flex:1}
+  input,select,textarea,button{font:inherit}
+  input[type=text],input[type=password],input[type=datetime-local],input[type=url],select,textarea{border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--acc2);border-color:var(--acc)}
+  button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:7px 12px;cursor:pointer;color:var(--ink)}
+  button:hover{background:#f7f8fb}
+  button.p{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.p:hover{background:#1565d8}
+  button.d{color:var(--warn)}
+  button:disabled{opacity:.5;cursor:default}
+  .tabs{display:flex;gap:2px}
+  .tabs button{border:none;background:none;padding:8px 12px;border-bottom:2px solid transparent;border-radius:0;color:var(--mute)}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--acc)}
+  main{max-width:1180px;margin:0 auto;padding:18px 20px 60px}
+  .pane{display:none}.pane.on{display:block}
+  .grid{display:grid;grid-template-columns:1fr 380px;gap:18px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .card h2{font-size:14px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  .n{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;align-items:center;justify-content:center}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .row>input[type=text]{flex:1;min-width:120px}
+  .muted{color:var(--mute);font-size:12px}
+  .prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px;max-height:380px;overflow:auto}
+  .prod{border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:pointer;background:#fff;position:relative}
+  .prod img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#eee}
+  .prod .t{padding:6px 8px;font-size:12px;line-height:1.35;height:52px;overflow:hidden}
+  .prod .s{padding:0 8px 6px;font-size:11px;color:var(--mute);display:flex;justify-content:space-between}
+  .prod.on{outline:2px solid var(--acc)}
+  .prod.on::after{content:"✓";position:absolute;top:6px;right:6px;background:var(--acc);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .chip{background:var(--acc2);border-radius:14px;padding:3px 10px;font-size:12px;display:inline-flex;gap:6px;align-items:center}
+  .chip b{cursor:pointer;color:var(--mute)}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{border:none;border-radius:0;border-right:1px solid var(--line);padding:7px 14px}
+  .seg button:last-child{border-right:none}
+  .seg button.on{background:var(--ink);color:#fff}
+  .crumb{display:flex;gap:4px;flex-wrap:wrap;font-size:12px;margin-bottom:8px}
+  .crumb a{color:var(--acc);cursor:pointer}
+  .dbx{display:grid;grid-template-columns:200px 1fr;gap:10px;min-height:240px}
+  .folders{border-right:1px solid var(--line);max-height:360px;overflow:auto;padding-right:6px}
+  .folders div{padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .folders div:hover{background:#f1f3f7}
+  .files{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;max-height:360px;overflow:auto;align-content:start}
+  .file{border:1px solid var(--line);border-radius:6px;overflow:hidden;cursor:pointer;background:#fafafa;position:relative}
+  .file img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+  .file span{display:block;font-size:10px;padding:3px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mute)}
+  .file.on{outline:2px solid var(--acc)}
+  .file.on::after{content:attr(data-i);position:absolute;top:4px;left:4px;background:var(--acc);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center}
+  .sel{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .sel .it{width:110px;position:relative}
+  .sel .it img{width:100%;border:1px solid var(--line);border-radius:6px;display:block;background:#eee}
+  .sel .it b{position:absolute;top:-6px;right:-6px;background:#fff;border:1px solid var(--line);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px}
+  .sel .it small{display:block;font-size:10px;color:var(--mute);text-align:center}
+  textarea{width:100%;min-height:200px;resize:vertical;line-height:1.6}
+  .vars{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .var{border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap;cursor:pointer;max-height:220px;overflow:auto;background:#fafbfd}
+  .var:hover{border-color:var(--acc)}
+  .link{font-family:ui-monospace,Consolas,monospace;font-size:12px;word-break:break-all;background:#f7f8fb;padding:8px;border-radius:6px;margin-top:8px}
+  .preview{border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+  .preview .ph{display:flex;gap:10px;align-items:center;padding:12px}
+  .preview .ph .av{width:40px;height:40px;border-radius:50%;background:#f3b63b;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff}
+  .preview .pm{padding:0 12px 12px;white-space:pre-wrap;font-size:14px;line-height:1.5}
+  .preview .pi{display:grid;gap:2px}
+  .preview .pi img{width:100%;display:block}
+  .preview .pi.c2{grid-template-columns:1fr 1fr}
+  .preview .pi.c3{grid-template-columns:1fr 1fr 1fr}
+  .msg{margin-top:10px;font-size:13px}
+  .msg.err{color:var(--warn)}.msg.ok{color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mute);font-weight:500;font-size:12px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:#eef1f6;color:var(--mute)}
+  .tag.s{background:#fff3cd;color:#8a6d00}.tag.p{background:#e3f6ea;color:var(--ok)}.tag.x{background:#fde7e7;color:var(--warn)}
+  .set{display:grid;grid-template-columns:160px 1fr auto;gap:8px 12px;align-items:center;max-width:760px}
+  .set input{width:100%}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:#ccc}
+  .dot.on{background:var(--ok)}
+  .red{color:var(--warn)}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>VV DOUBLE · FB 貼文</h1>
+  <nav class="tabs">
+    <button class="on" data-t="post">貼文</button>
+    <button data-t="list">紀錄</button>
+    <button data-t="stats">成效</button>
+    <button data-t="set">設定</button>
+  </nav>
+  <span class="sp"></span>
+  <input type="text" id="who" placeholder="操作者" size="8">
+  <input type="password" id="pw" placeholder="密碼" size="10">
+  <span id="conn" class="muted"></span>
+</header>
+
+<main>
+<!-- ================= 貼文 ================= -->
+<section class="pane on" id="pane-post">
+<div class="grid">
+<div>
+  <div class="card">
+    <h2><span class="n">1</span>商品</h2>
+    <div class="row">
+      <input type="text" id="q" placeholder="商品名稱或貨號前六碼（例 26AU06）">
+      <button id="qBtn" class="p">搜尋</button>
+    </div>
+    <div id="prods" class="prods"></div>
+    <div id="chips" class="chips"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">2</span>貼文類型</h2>
+    <div class="seg" id="types">
+      <button data-v="new" class="on">新品</button>
+      <button data-v="restock">補貨</button>
+      <button data-v="promo">活動</button>
+      <button data-v="outfit">穿搭</button>
+      <button data-v="link">活動連結</button>
+    </div>
+    <span class="muted" id="specTxt" style="margin-left:10px"></span>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">3</span>圖片 <span class="muted" id="imgHint"></span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <div class="seg" id="imgSrc"><button data-v="dbx" class="on">Dropbox</button><button data-v="sl">商品頁圖</button></div>
+      <label class="muted"><input type="checkbox" id="noCrop"> 不裁切</label>
+      <span class="sp"></span>
+      <button id="dbxUp">上一層</button>
+      <button id="dbxRefresh">重新整理</button>
+    </div>
+    <div id="dbxWrap">
+      <div class="crumb" id="crumb"></div>
+      <div class="dbx">
+        <div class="folders" id="folders"></div>
+        <div class="files" id="files"></div>
+      </div>
+    </div>
+    <div id="slWrap" class="files hide"></div>
+    <div class="sel" id="sel"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">4</span>文案</h2>
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" id="extra" placeholder="這次要強調的點（選填）">
+      <button id="copyBtn" class="p">AI 產 3 版</button>
+    </div>
+    <div id="vars" class="vars"></div>
+    <textarea id="msg" placeholder="文案"></textarea>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">5</span>連結</h2>
+    <div class="row">
+      <select id="linkSel"></select>
+      <input type="text" id="linkCustom" placeholder="自訂網址" class="hide">
+      <select id="medium"><option value="post">post</option><option value="ad">ad</option></select>
+      <button id="insLink">插入文案</button>
+    </div>
+    <div class="link" id="linkOut"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">6</span>時間</h2>
+    <div class="row">
+      <div class="seg" id="when"><button data-v="now" class="on">立即</button><button data-v="later">排程</button></div>
+      <input type="datetime-local" id="at" class="hide">
+      <span class="muted" id="atHint"></span>
+    </div>
+  </div>
+</div>
+
+<div>
+  <div class="card" style="position:sticky;top:64px">
+    <h2>預覽</h2>
+    <div class="preview">
+      <div class="ph"><div class="av">VV</div><div><b>VV Double</b><div class="muted" id="pvTime">現在</div></div></div>
+      <div class="pm" id="pvMsg"></div>
+      <div class="pi" id="pvImgs"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="pub" class="p" style="flex:1;padding:10px">發布到粉專</button>
+      <button id="reset">清空</button>
+    </div>
+    <div id="pubMsg" class="msg"></div>
+  </div>
+</div>
+</div>
+</section>
+
+<!-- ================= 紀錄 ================= -->
+<section class="pane" id="pane-list">
+  <div class="card">
+    <div class="row" style="margin-bottom:8px"><h2 style="margin:0">發文紀錄</h2><span class="sp"></span><button id="listRefresh">重新整理</button></div>
+    <table><thead><tr><th>時間</th><th>狀態</th><th>類型</th><th>商品</th><th>文案</th><th>UTM</th><th>貼文 ID</th><th></th></tr></thead><tbody id="listBody"></tbody></table>
+  </div>
+</section>
+
+<!-- ================= 成效 ================= -->
+<section class="pane" id="pane-stats">
+  <div class="card">
+    <div class="row" style="margin-bottom:8px">
+      <h2 style="margin:0">貼文成效</h2>
+      <select id="days"><option value="30">30 天</option><option value="90">90 天</option><option value="180">180 天</option><option value="365">一年</option></select>
+      <button id="statsBtn" class="p">載入</button>
+      <span class="sp"></span><span class="muted" id="statsNote"></span>
+    </div>
+    <table><thead><tr><th></th><th>時間</th><th>文案</th><th>來源</th><th class="num">觸及</th><th class="num">點擊</th><th class="num">互動</th><th class="num">讚</th><th class="num">留言</th><th class="num">分享</th></tr></thead><tbody id="statsBody"></tbody></table>
+  </div>
+</section>
+
+<!-- ================= 設定 ================= -->
+<section class="pane" id="pane-set">
+  <div class="card">
+    <h2>連線狀態 <span class="muted" id="ver"></span></h2>
+    <div class="row" style="gap:18px">
+      <span><i class="dot" id="dMeta"></i> Meta</span>
+      <span><i class="dot" id="dDbx"></i> Dropbox</span>
+      <span><i class="dot" id="dSl"></i> Shopline</span>
+      <span><i class="dot" id="dAi"></i> Claude</span>
+      <span class="sp"></span>
+      <button id="metaCheck">測試 Meta</button>
+    </div>
+    <div id="setMsg" class="msg"></div>
+  </div>
+  <div class="card">
+    <h2>Meta</h2>
+    <div class="set">
+      <label>粉專 ID</label><input type="text" id="sPage"><span></span>
+      <label>Page Access Token</label><input type="password" id="sMeta" placeholder="已設定的不會顯示，留空＝不更動"><span></span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Dropbox</h2>
+    <div class="set">
+      <label>App Key</label><input type="text" id="sDbxKey"><span></span>
+      <label>根目錄</label><input type="text" id="sDbxRoot" placeholder="/VV DOUBLE TEAM 團隊資料夾/官網部門"><span></span>
+      <label>授權</label><span id="dbxState" class="muted"></span><button id="dbxConnect">連接 Dropbox</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Shopline ／ Claude</h2>
+    <div class="set">
+      <label>Shopline Token</label><input type="password" id="sSl" placeholder="留空＝不更動"><span></span>
+      <label>Claude API Key</label><input type="password" id="sAi" placeholder="留空＝不更動"><span></span>
+      <label>模型</label><input type="text" id="sModel" placeholder="claude-sonnet-4-6"><span></span>
+      <label>文案補充規則</label><textarea id="sRules" style="min-height:70px"></textarea><span></span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>UTM ／ 密碼</h2>
+    <div class="set">
+      <label>utm_source</label><input type="text" id="sUtmS" placeholder="fb"><span></span>
+      <label>預設 utm_medium</label><input type="text" id="sUtmM" placeholder="post"><span></span>
+      <label>更改工具密碼</label><input type="password" id="sNewPw" placeholder="留空＝不更動"><span></span>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="saveSet" class="p">儲存設定</button><span class="muted">第一次使用：上方密碼欄輸入要設定的密碼後按儲存</span></div>
+  </div>
+</section>
+</main>
+
+<script>
+var FN_URL = 'https://asia-east1-vvdouble-shopline.cloudfunctions.net/fbpost';
+var PAGE_URL = location.origin + location.pathname;
+var $ = function(s){ return document.querySelector(s); };
+var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+
+var S = {
+  products: [], selected: [],           // 商品搜尋結果／已選
+  type: 'new', imgSrc: 'dbx', noCrop: false,
+  dbxPath: '', dbxRoot: '', dbxFolders: [], dbxFiles: [], slFiles: [],
+  images: [],                            // {key,name,src:'dbx'|'sl',path|url,thumb,b64,mime,w,h}
+  when: 'now', cfg: {}, medium: 'post'
+};
+var SPEC = {
+  new:     { w:1080, h:1350, label:'直式 4:5（1080×1350）' },
+  restock: { w:1080, h:1350, label:'直式 4:5（1080×1350）' },
+  outfit:  { w:1080, h:1350, label:'直式 4:5（1080×1350）' },
+  promo:   { w:1080, h:1080, label:'方形 1:1（1080×1080）' },
+  link:    { w:1200, h:630,  label:'橫式 banner（1200×630）' }
+};
+
+// ---------- 共用 ----------
+async function api(action, data){
+  var r = await fetch(FN_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'X-Tool-Password': $('#pw').value }, body: JSON.stringify(Object.assign({ action: action }, data || {})) });
+  var j = await r.json().catch(function(){ return {}; });
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+function say(el, text, cls){ el.textContent = text; el.className = 'msg ' + (cls || ''); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function pad(n){ return (n < 10 ? '0' : '') + n; }
+function taipei(ts){
+  var o = {}; new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(ts)).forEach(function(p){ o[p.type]=p.value; });
+  if (o.hour === '24') o.hour = '00';
+  return o;
+}
+function utmCampaign(ts){ var p = taipei(ts); return p.month + p.day + p.year + '_' + p.hour + p.minute; }
+function fmt(ts){ var d = new Date(ts); return d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function publishTs(){
+  if (S.when === 'later' && $('#at').value) return new Date($('#at').value).getTime();
+  return Date.now();
+}
+
+// ---------- 分頁 ----------
+$$('.tabs button').forEach(function(b){ b.addEventListener('click', function(){
+  $$('.tabs button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  $$('.pane').forEach(function(p){ p.classList.toggle('on', p.id === 'pane-' + b.dataset.t); });
+  if (b.dataset.t === 'list') loadList();
+  if (b.dataset.t === 'set') loadStatus();
+}); });
+$('#pw').value = sessionStorage.getItem('fbpost_pw') || '';
+$('#who').value = localStorage.getItem('fbpost_who') || '';
+$('#pw').addEventListener('change', function(){ sessionStorage.setItem('fbpost_pw', $('#pw').value); loadStatus(); });
+$('#who').addEventListener('change', function(){ localStorage.setItem('fbpost_who', $('#who').value); });
+
+// ---------- 設定／狀態 ----------
+async function loadStatus(){
+  if (!$('#pw').value) { $('#conn').textContent = ''; return; }
+  try {
+    var s = await api('status');
+    S.cfg = s;
+    $('#conn').textContent = '已連線';
+    $('#ver').textContent = s.version;
+    $('#dMeta').className = 'dot' + (s.meta ? ' on' : '');
+    $('#dDbx').className = 'dot' + (s.dropbox ? ' on' : '');
+    $('#dSl').className = 'dot' + (s.shopline ? ' on' : '');
+    $('#dAi').className = 'dot' + (s.claude ? ' on' : '');
+    $('#sPage').value = s.pageId; $('#sDbxKey').value = s.dropboxAppKey; $('#sDbxRoot').value = s.dropboxRoot;
+    $('#sModel').value = s.claudeModel; $('#sRules').value = s.copyRules; $('#sUtmS').value = s.utmSource; $('#sUtmM').value = s.utmMedium;
+    $('#dbxState').textContent = s.dropbox ? '已授權' : '尚未授權';
+    S.dbxRoot = s.dropboxRoot || '';
+    S.medium = s.utmMedium || 'post'; $('#medium').value = S.medium;
+    if (!S.dbxPath) { S.dbxPath = S.dbxRoot; }
+    if (s.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
+    renderLink();
+  } catch (e) {
+    $('#conn').textContent = e.message;
+  }
+}
+$('#saveSet').addEventListener('click', async function(){
+  var m = $('#setMsg');
+  try {
+    var r = await api('setup', {
+      pageId: $('#sPage').value, metaToken: $('#sMeta').value, dropboxAppKey: $('#sDbxKey').value, dropboxRoot: $('#sDbxRoot').value,
+      shoplineToken: $('#sSl').value, anthropicKey: $('#sAi').value, claudeModel: $('#sModel').value, copyRules: $('#sRules').value,
+      utmSource: $('#sUtmS').value, utmMedium: $('#sUtmM').value, newPassword: $('#sNewPw').value
+    });
+    if ($('#sNewPw').value) { $('#pw').value = $('#sNewPw').value; sessionStorage.setItem('fbpost_pw', $('#pw').value); }
+    ['#sMeta','#sSl','#sAi','#sNewPw'].forEach(function(s){ $(s).value = ''; });
+    say(m, r.first ? '密碼已建立，請再按一次儲存寫入其他設定' : '已儲存', 'ok');
+    loadStatus();
+  } catch (e) { say(m, e.message, 'err'); }
+});
+$('#metaCheck').addEventListener('click', async function(){
+  var m = $('#setMsg');
+  try { var r = await api('metaCheck'); say(m, r.ok ? ('粉專：' + r.page.name + '（' + r.page.fan_count + ' 人按讚）') : r.error, r.ok ? 'ok' : 'err'); }
+  catch (e) { say(m, e.message, 'err'); }
+});
+
+// Dropbox OAuth（PKCE）
+function b64url(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+$('#dbxConnect').addEventListener('click', async function(){
+  var key = $('#sDbxKey').value.trim();
+  if (!key) { say($('#setMsg'), '先填 App Key 並儲存', 'err'); return; }
+  var arr = new Uint8Array(48); crypto.getRandomValues(arr);
+  var verifier = b64url(arr.buffer);
+  var challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  sessionStorage.setItem('dbx_verifier', verifier);
+  location.href = 'https://www.dropbox.com/oauth2/authorize?client_id=' + encodeURIComponent(key) + '&response_type=code&token_access_type=offline&code_challenge_method=S256&code_challenge=' + challenge + '&redirect_uri=' + encodeURIComponent(PAGE_URL);
+});
+(async function dbxCallback(){
+  var code = new URLSearchParams(location.search).get('code');
+  if (!code) return;
+  history.replaceState(null, '', PAGE_URL);
+  $$('.tabs button')[3].click();
+  try {
+    await api('dropboxExchange', { code: code, verifier: sessionStorage.getItem('dbx_verifier') || '', redirect: PAGE_URL });
+    say($('#setMsg'), 'Dropbox 已連接', 'ok'); loadStatus();
+  } catch (e) { say($('#setMsg'), 'Dropbox 連接失敗：' + e.message, 'err'); }
+})();
+
+// ---------- ❶ 商品 ----------
+$('#qBtn').addEventListener('click', search);
+$('#q').addEventListener('keydown', function(e){ if (e.key === 'Enter') search(); });
+async function search(){
+  var q = $('#q').value.trim(); if (!q) return;
+  $('#prods').innerHTML = '<span class="muted">搜尋中…</span>';
+  try {
+    var r = await api('shoplineSearch', { query: q });
+    S.products = r.items;
+    renderProds();
+  } catch (e) { $('#prods').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
+}
+function renderProds(){
+  var box = $('#prods'); box.innerHTML = '';
+  if (!S.products.length) { box.innerHTML = '<span class="muted">沒有結果</span>'; return; }
+  S.products.forEach(function(p){
+    var d = document.createElement('div'); d.className = 'prod' + (S.selected.some(function(s){ return s.id === p.id; }) ? ' on' : '');
+    d.innerHTML = '<img src="' + esc(p.images[0] || '') + '" loading="lazy"><div class="t">' + esc(p.title) + '</div><div class="s"><span>' + esc(p.sku) + '</span><span>$' + esc(p.priceSale || p.price || '') + '</span></div>';
+    d.addEventListener('click', function(){ toggleProd(p); });
+    box.appendChild(d);
+  });
+}
+function toggleProd(p){
+  var i = S.selected.findIndex(function(s){ return s.id === p.id; });
+  if (i >= 0) S.selected.splice(i, 1); else S.selected.push(p);
+  renderProds(); renderChips(); renderLinkOptions(); renderSlFiles();
+}
+function renderChips(){
+  $('#chips').innerHTML = S.selected.map(function(p){ return '<span class="chip">' + esc(p.sku || p.title) + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
+  $$('#chips b').forEach(function(b){ b.addEventListener('click', function(){ toggleProd({ id: b.dataset.id }); }); });
+}
+
+// ---------- ❷ 類型 ----------
+$$('#types button').forEach(function(b){ b.addEventListener('click', function(){
+  $$('#types button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  S.type = b.dataset.v; updateSpec(); reprocessAll();
+}); });
+function updateSpec(){ $('#specTxt').textContent = SPEC[S.type].label; $('#imgHint').textContent = S.noCrop ? '維持原比例' : '自動裁成 ' + SPEC[S.type].label; }
+$('#noCrop').addEventListener('change', function(){ S.noCrop = $('#noCrop').checked; updateSpec(); reprocessAll(); });
+updateSpec();
+
+// ---------- ❸ 圖片 ----------
+$$('#imgSrc button').forEach(function(b){ b.addEventListener('click', function(){
+  $$('#imgSrc button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  S.imgSrc = b.dataset.v;
+  $('#dbxWrap').classList.toggle('hide', S.imgSrc !== 'dbx');
+  $('#slWrap').classList.toggle('hide', S.imgSrc !== 'sl');
+  $('#dbxUp').classList.toggle('hide', S.imgSrc !== 'dbx'); $('#dbxRefresh').classList.toggle('hide', S.imgSrc !== 'dbx');
+  if (S.imgSrc === 'sl') renderSlFiles();
+}); });
+$('#dbxUp').addEventListener('click', function(){
+  if (!S.dbxPath || S.dbxPath.toLowerCase() === S.dbxRoot.toLowerCase()) return;
+  dbxLoad(S.dbxPath.replace(/\/[^\/]+$/, ''));
+});
+$('#dbxRefresh').addEventListener('click', function(){ dbxLoad(S.dbxPath); });
+async function dbxLoad(path){
+  $('#folders').innerHTML = '<div class="muted">載入中…</div>'; $('#files').innerHTML = '';
+  try {
+    var r = await api('dropboxList', { path: path });
+    S.dbxPath = r.path; S.dbxFolders = r.folders; S.dbxFiles = r.files;
+    renderDbx();
+    if (r.files.length) {
+      var paths = r.files.map(function(f){ return f.path; });
+      for (var i = 0; i < paths.length; i += 25) {
+        var t = await api('dropboxThumbs', { paths: paths.slice(i, i + 25) });
+        Object.keys(t.thumbs).forEach(function(p){ var el = document.querySelector('.file[data-p="' + CSS.escape(p) + '"] img'); if (el) el.src = t.thumbs[p]; });
+      }
+    }
+  } catch (e) { $('#folders').innerHTML = '<div class="red">' + esc(e.message) + '</div>'; }
+}
+function renderDbx(){
+  var rel = S.dbxPath.slice(S.dbxRoot.length).split('/').filter(Boolean);
+  var html = '<a data-p="' + esc(S.dbxRoot) + '">官網部門</a>'; var acc = S.dbxRoot;
+  rel.forEach(function(seg){ acc += '/' + seg; html += ' / <a data-p="' + esc(acc) + '">' + esc(seg) + '</a>'; });
+  $('#crumb').innerHTML = html;
+  $$('#crumb a').forEach(function(a){ a.addEventListener('click', function(){ dbxLoad(a.dataset.p); }); });
+  $('#folders').innerHTML = S.dbxFolders.map(function(f){ return '<div data-p="' + esc(f.path) + '">📁 ' + esc(f.name) + '</div>'; }).join('') || '<div class="muted">沒有子資料夾</div>';
+  $$('#folders div[data-p]').forEach(function(d){ d.addEventListener('click', function(){ dbxLoad(d.dataset.p); }); });
+  $('#files').innerHTML = S.dbxFiles.map(function(f){ return '<div class="file" data-p="' + esc(f.path) + '"><img alt=""><span>' + esc(f.name) + '</span></div>'; }).join('') || '<div class="muted">這層沒有圖片</div>';
+  $$('#files .file').forEach(function(d){ d.addEventListener('click', function(){ pickDbx(d.dataset.p, d.querySelector('span').textContent, d.querySelector('img').src); }); });
+  markPicked();
+}
+function markPicked(){
+  $$('.file').forEach(function(d){
+    var i = S.images.findIndex(function(im){ return im.key === (d.dataset.p || d.dataset.u); });
+    d.classList.toggle('on', i >= 0); if (i >= 0) d.setAttribute('data-i', i + 1);
+  });
+}
+async function pickDbx(path, name, thumb){
+  var i = S.images.findIndex(function(im){ return im.key === path; });
+  if (i >= 0) { S.images.splice(i, 1); renderSel(); markPicked(); return; }
+  if (S.images.length >= 10) return;
+  var im = { key: path, name: name, src: 'dbx', thumb: thumb, loading: true };
+  S.images.push(im); renderSel(); markPicked();
+  try {
+    var r = await api('dropboxFile', { path: path });
+    await processImage(im, 'data:' + r.mime + ';base64,' + r.b64);
+  } catch (e) { im.error = e.message; }
+  im.loading = false; renderSel();
+}
+function renderSlFiles(){
+  var urls = [];
+  S.selected.forEach(function(p){ p.images.concat(p.detailImages).forEach(function(u){ if (urls.indexOf(u) < 0) urls.push(u); }); });
+  S.slFiles = urls;
+  $('#slWrap').innerHTML = urls.map(function(u, i){ return '<div class="file" data-u="' + esc(u) + '"><img src="' + esc(u) + '" loading="lazy"><span>' + (i + 1) + '</span></div>'; }).join('') || '<div class="muted">先選商品</div>';
+  $$('#slWrap .file').forEach(function(d){ d.addEventListener('click', function(){ pickSl(d.dataset.u); }); });
+  markPicked();
+}
+async function pickSl(url){
+  var i = S.images.findIndex(function(im){ return im.key === url; });
+  if (i >= 0) { S.images.splice(i, 1); renderSel(); markPicked(); return; }
+  if (S.images.length >= 10) return;
+  var im = { key: url, name: url.split('/').pop().split('?')[0], src: 'sl', thumb: url, loading: true };
+  S.images.push(im); renderSel(); markPicked();
+  try { await processImage(im, url); } catch (e) { im.error = '無法載入（' + e.message + '）'; }
+  im.loading = false; renderSel();
+}
+// 依貼文類型裁切／縮放 → JPEG base64
+function processImage(im, srcUrl){
+  return new Promise(function(resolve, reject){
+    var img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = function(){
+      try {
+        var sp = SPEC[S.type], c = document.createElement('canvas'), ctx = c.getContext('2d');
+        if (S.noCrop) {
+          var k = Math.min(1, 2048 / Math.max(img.width, img.height));
+          c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+        } else {
+          c.width = sp.w; c.height = sp.h;
+          var r = Math.max(sp.w / img.width, sp.h / img.height);
+          var w = img.width * r, h = img.height * r;
+          ctx.drawImage(img, (sp.w - w) / 2, (sp.h - h) / 2, w, h);
+        }
+        var data = c.toDataURL('image/jpeg', 0.9);
+        im.orig = srcUrl; im.b64 = data.split(',')[1]; im.mime = 'image/jpeg'; im.w = c.width; im.h = c.height; im.preview = data; im.error = '';
+        resolve();
+      } catch (e) { reject(e); }
+    };
+    img.onerror = function(){ reject(new Error('讀圖失敗')); };
+    img.src = srcUrl;
+  });
+}
+async function reprocessAll(){
+  for (var i = 0; i < S.images.length; i++) { var im = S.images[i]; if (im.orig) { try { await processImage(im, im.orig); } catch (e) {} } }
+  renderSel();
+}
+function renderSel(){
+  $('#sel').innerHTML = S.images.map(function(im, i){
+    return '<div class="it"><img src="' + esc(im.preview || im.thumb || '') + '"><b data-i="' + i + '">✕</b><small>' + (im.loading ? '處理中…' : im.error ? '<span class="red">' + esc(im.error) + '</span>' : (im.w + '×' + im.h)) + '</small></div>';
+  }).join('');
+  $$('#sel b').forEach(function(b){ b.addEventListener('click', function(){ S.images.splice(Number(b.dataset.i), 1); renderSel(); markPicked(); renderPreview(); }); });
+  renderPreview();
+}
+
+// ---------- ❹ 文案 ----------
+$('#copyBtn').addEventListener('click', async function(){
+  $('#vars').innerHTML = '<span class="muted">產生中…</span>';
+  try {
+    var r = await api('copy', { products: S.selected.map(function(p){ return { title: p.title, price: p.price, priceSale: p.priceSale, colors: p.colors, description: p.description }; }), type: S.type, extra: $('#extra').value, link: currentLink() });
+    $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
+    $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); }); });
+    if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); }
+  } catch (e) { $('#vars').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
+});
+$('#msg').addEventListener('input', renderPreview);
+
+// ---------- ❺ 連結 ----------
+function renderLinkOptions(){
+  var sel = $('#linkSel'), cur = sel.value;
+  var opts = S.selected.map(function(p){ return '<option value="' + esc(p.url) + '">商品頁：' + esc(p.sku || p.title) + '</option>'; });
+  opts.push('<option value="https://www.vvdouble.com/">官網首頁</option>');
+  opts.push('<option value="custom">自訂…</option>');
+  sel.innerHTML = opts.join('');
+  if (Array.prototype.some.call(sel.options, function(o){ return o.value === cur; })) sel.value = cur;
+  renderLink();
+}
+$('#linkSel').addEventListener('change', function(){ $('#linkCustom').classList.toggle('hide', $('#linkSel').value !== 'custom'); renderLink(); });
+$('#linkCustom').addEventListener('input', renderLink);
+$('#medium').addEventListener('change', function(){ S.medium = $('#medium').value; renderLink(); });
+function currentLink(){
+  var base = $('#linkSel').value === 'custom' ? $('#linkCustom').value.trim() : $('#linkSel').value;
+  if (!base) return '';
+  try {
+    var u = new URL(base);
+    u.searchParams.set('utm_source', S.cfg.utmSource || 'fb');
+    u.searchParams.set('utm_medium', S.medium || 'post');
+    u.searchParams.set('utm_campaign', utmCampaign(publishTs()));
+    return u.toString();
+  } catch (e) { return ''; }
+}
+function renderLink(){ $('#linkOut').textContent = currentLink() || '—'; }
+$('#insLink').addEventListener('click', function(){
+  var l = currentLink(); if (!l) return;
+  var t = $('#msg').value.replace(/\n?https?:\/\/www\.vvdouble\.com\S*\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  var lines = t.split('\n'), idx = lines.findIndex(function(x){ return /^#/.test(x.trim()); });
+  if (idx >= 0) lines.splice(idx, 0, '', l, ''); else lines.push('', l);
+  $('#msg').value = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  renderPreview();
+});
+renderLinkOptions();
+
+// ---------- ❻ 時間 ----------
+$$('#when button').forEach(function(b){ b.addEventListener('click', function(){
+  $$('#when button').forEach(function(x){ x.classList.toggle('on', x === b); });
+  S.when = b.dataset.v; $('#at').classList.toggle('hide', S.when !== 'later');
+  if (S.when === 'later' && !$('#at').value) { var d = new Date(Date.now() + 3600000); d.setMinutes(0); $('#at').value = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':00'; }
+  renderLink(); renderPreview();
+}); });
+$('#at').addEventListener('change', function(){ renderLink(); renderPreview(); });
+
+// ---------- 預覽／發布 ----------
+function renderPreview(){
+  $('#pvMsg').textContent = $('#msg').value;
+  $('#pvTime').textContent = S.when === 'later' && $('#at').value ? '排程 ' + fmt(new Date($('#at').value).getTime()) : '現在';
+  var ims = S.images.filter(function(i){ return i.preview; });
+  var box = $('#pvImgs'); box.className = 'pi' + (ims.length === 2 ? ' c2' : ims.length >= 3 ? ' c3' : '');
+  box.innerHTML = ims.slice(0, 3).map(function(i){ return '<img src="' + i.preview + '">'; }).join('') + (ims.length > 3 ? '<div class="muted" style="padding:6px">+' + (ims.length - 3) + ' 張</div>' : '');
+  $('#atHint').textContent = S.when === 'later' ? '排程需晚於 10 分鐘後，最長 75 天' : '';
+}
+$('#pub').addEventListener('click', async function(){
+  var m = $('#pubMsg');
+  var ims = S.images.filter(function(i){ return i.b64; });
+  if (S.images.some(function(i){ return i.loading; })) { say(m, '圖片還在處理', 'err'); return; }
+  if (!$('#msg').value.trim() && !ims.length) { say(m, '沒有內容', 'err'); return; }
+  var ts = publishTs();
+  if (S.when === 'later' && ts < Date.now() + 10 * 60000) { say(m, '排程時間要在 10 分鐘以後', 'err'); return; }
+  if (!confirm((S.when === 'later' ? '排程 ' + fmt(ts) : '立即') + ' 發布到粉專？')) return;
+  $('#pub').disabled = true; say(m, '上傳中…');
+  try {
+    var r = await api('publish', {
+      message: $('#msg').value, link: ims.length ? '' : currentLink(), scheduledAt: S.when === 'later' ? ts : 0,
+      images: ims.map(function(i){ return { b64: i.b64, mime: i.mime, name: i.name }; }),
+      meta: { type: S.type, skus: S.selected.map(function(p){ return p.sku; }), titles: S.selected.map(function(p){ return p.title; }), utm: currentLink() ? utmCampaign(ts) : '', by: $('#who').value }
+    });
+    say(m, (r.scheduled ? '已排程' : '已發布') + '　貼文 ID ' + r.postId, 'ok');
+  } catch (e) { say(m, e.message, 'err'); }
+  $('#pub').disabled = false;
+});
+$('#reset').addEventListener('click', function(){
+  if (!confirm('清空這篇？')) return;
+  S.selected = []; S.images = []; $('#msg').value = ''; $('#extra').value = ''; $('#vars').innerHTML = ''; $('#pubMsg').textContent = '';
+  renderProds(); renderChips(); renderLinkOptions(); renderSel(); renderSlFiles();
+});
+
+// ---------- 紀錄 ----------
+$('#listRefresh').addEventListener('click', loadList);
+async function loadList(){
+  var tb = $('#listBody'); tb.innerHTML = '<tr><td colspan="8" class="muted">載入中…</td></tr>';
+  try {
+    var r = await api('listPosts', { n: 200 });
+    tb.innerHTML = r.posts.map(function(p){
+      var st = p.status === 'scheduled' ? '<span class="tag s">排程 ' + fmt(p.scheduledAt) + '</span>' : p.status === 'deleted' ? '<span class="tag x">已刪</span>' : '<span class="tag p">已發布</span>';
+      return '<tr><td>' + fmt(p.createdAt) + '<div class="muted">' + esc(p.by || '') + '</div></td><td>' + st + '</td><td>' + esc({new:'新品',restock:'補貨',promo:'活動',outfit:'穿搭',link:'連結'}[p.type] || p.type) + '</td><td>' + esc((p.skus || []).join('、')) + '</td><td class="muted">' + esc((p.message || '').slice(0, 60)) + '</td><td>' + esc(p.utm || '') + '</td><td style="font-family:monospace;font-size:11px">' + esc(p.postId || '') + '</td><td>' + (p.status !== 'deleted' ? '<button class="d" data-id="' + esc(p.id) + '" data-pid="' + esc(p.postId) + '">刪除</button>' : '') + '</td></tr>';
+    }).join('') || '<tr><td colspan="8" class="muted">還沒有紀錄</td></tr>';
+    $$('#listBody button').forEach(function(b){ b.addEventListener('click', async function(){
+      if (!confirm('從粉專刪除這篇貼文？')) return;
+      try { await api('deletePost', { id: b.dataset.id, postId: b.dataset.pid }); loadList(); } catch (e) { alert(e.message); }
+    }); });
+  } catch (e) { tb.innerHTML = '<tr><td colspan="8" class="red">' + esc(e.message) + '</td></tr>'; }
+}
+
+// ---------- 成效 ----------
+$('#statsBtn').addEventListener('click', async function(){
+  var tb = $('#statsBody'); tb.innerHTML = '<tr><td colspan="10" class="muted">載入中…</td></tr>'; $('#statsNote').textContent = '';
+  try {
+    var r = await api('insights', { days: Number($('#days').value) });
+    var posts = r.posts.slice().sort(function(a, b){ return (b.reach || b.reactions) - (a.reach || a.reactions); });
+    if (r.insightsError) $('#statsNote').textContent = '觸及／點擊指標不可用：' + r.insightsError;
+    tb.innerHTML = posts.map(function(p){
+      return '<tr><td>' + (p.picture ? '<img src="' + esc(p.picture) + '" style="width:44px;height:44px;object-fit:cover;border-radius:4px">' : '') + '</td><td>' + fmt(new Date(p.created).getTime()) + '</td><td><a href="' + esc(p.url) + '" target="_blank" style="color:inherit">' + esc(p.message || '（無文字）') + '</a></td><td>' + (p.mine ? '<span class="tag p">工具 ' + esc(p.mine.utm || '') + '</span>' : '<span class="tag">手動</span>') + '</td><td class="num">' + p.reach + '</td><td class="num">' + p.clicks + '</td><td class="num">' + p.engaged + '</td><td class="num">' + p.reactions + '</td><td class="num">' + p.comments + '</td><td class="num">' + p.shares + '</td></tr>';
+    }).join('') || '<tr><td colspan="10" class="muted">這段期間沒有貼文</td></tr>';
+  } catch (e) { tb.innerHTML = '<tr><td colspan="10" class="red">' + esc(e.message) + '</td></tr>'; }
+});
+
+loadStatus();
+</script>
+</body>
+</html>
