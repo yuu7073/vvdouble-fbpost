@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25m";
+const VERSION = "2026-10-25n";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -367,23 +367,47 @@ exports.fbpost = onRequest(
         }
 
         case "dropboxFind": {
-          // 依商品名找 Dropbox 資料夾：資料夾命名「OK <商品名>」，分色款再一層顏色子資料夾
+          // 依商品名找 Dropbox 資料夾：不靠搜尋，直接走 根目錄 → 日期資料夾 → 分類 → 「OK <商品名>」；分色款再進顏色子資料夾
           const title = String(body.title || "").trim();
           if (!title) return res.status(400).json({ error: "缺少商品名" });
           const m = title.match(/^(.*?)(?:-([^-]{1,6}))?$/);
           const base = (m && m[1] || title).trim(), color = (m && m[2] || "").trim();
-          const norm = (s) => String(s || "").replace(/^ok\s*/i, "").replace(/[\s　]/g, "").toLowerCase();
-          const q = base.replace(/[《》〈〉「」『』【】()（）]/g, " ").trim().slice(0, 60);
-          const root = cfg.dropboxRoot || "";
-          let j = await dbxRpc(cfg, "/files/search_v2", { query: q, options: { path: root || "", max_results: 50, file_status: "active", filename_only: true, file_categories: [{ ".tag": "folder" }] } });
-          let hits = (j.matches || []).map((x) => x.metadata && x.metadata.metadata).filter((x) => x && x[".tag"] === "folder");
+          const norm = (s) => String(s || "").replace(/^ok\s*/i, "").replace(/[\s　《》〈〉「」『』【】()（）]/g, "").toLowerCase();
           const nb = norm(base);
-          let exact = hits.filter((h) => norm(h.name) === nb || norm(h.name) === norm(title));
-          let partial = hits.filter((h) => norm(h.name).includes(nb) || nb.includes(norm(h.name)));
+          const listFolders = async (path) => {
+            let j = await dbxRpc(cfg, "/files/list_folder", { path, limit: 2000 });
+            let e = j.entries || [];
+            while (j.has_more) { j = await dbxRpc(cfg, "/files/list_folder/continue", { cursor: j.cursor }); e = e.concat(j.entries || []); }
+            return e.filter((x) => x[".tag"] === "folder");
+          };
+          const root = cfg.dropboxRoot || "";
+          const isDate = (n) => /^\d{3,4}/.test(n);
+          const isCat = (n) => /分類/.test(n);
+          // 1) 決定要掃的「日期資料夾」清單
+          let dateDirs = [];
+          const rootFolders = await listFolders(root);
+          if (rootFolders.some((x) => isCat(x.name))) dateDirs = [{ name: root.split("/").pop(), path_lower: root }];
+          else dateDirs = rootFolders.filter((x) => isDate(x.name)).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 6);
+          if (!dateDirs.length) dateDirs = rootFolders.slice(0, 6);
+          // 2) 每個日期資料夾 → 分類層（沒有就用日期資料夾本身）→ 收集商品資料夾
+          const scanned = [], all = [];
+          for (const d of dateDirs) {
+            const subs = await listFolders(d.path_lower);
+            const cats = subs.filter((x) => isCat(x.name));
+            const targets = cats.length ? cats : [d];
+            for (const t of targets) {
+              scanned.push(t.path_lower);
+              const items = t === d ? subs : await listFolders(t.path_lower);
+              items.forEach((x) => all.push(x));
+              // 分類層底下若還有一層子分類（例如 上衣／褲子），再往下一層
+              for (const x of items) { if (!/^ok/i.test(x.name) && !norm(x.name).includes(nb)) { try { const deeper = await listFolders(x.path_lower); deeper.forEach((y) => all.push(y)); } catch (e) {} } }
+            }
+          }
+          const exact = all.filter((h) => norm(h.name) === nb || norm(h.name) === norm(title));
+          const partial = all.filter((h) => norm(h.name).includes(nb) || (nb.length >= 6 && nb.includes(norm(h.name)) && norm(h.name).length >= 6));
           const cand = (exact.length ? exact : partial).sort((a, b) => b.path_lower.localeCompare(a.path_lower));
-          if (!cand.length) return res.json({ found: false, tried: q });
+          if (!cand.length) return res.json({ found: false, scanned, total: all.length });
           let path = cand[0].path_lower, pickedColor = "";
-          // 顏色子資料夾
           try {
             const sub = await dbxRpc(cfg, "/files/list_folder", { path, limit: 200 });
             const folders = (sub.entries || []).filter((e) => e[".tag"] === "folder");
