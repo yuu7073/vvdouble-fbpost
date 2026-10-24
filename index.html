@@ -357,6 +357,11 @@
     </div>
   </div>
   <div class="card">
+    <h2>Dropbox 舊資料夾補貨號</h2>
+    <div class="row"><button id="rnScan">試算</button><button id="rnRun" class="p" disabled>執行改名</button><span class="muted" id="rnMsg"></span></div>
+    <div id="rnList" style="max-height:300px;overflow:auto;margin-top:8px;font-size:12px"></div>
+  </div>
+  <div class="card">
     <h2>週模板</h2>
     <div class="row" style="margin-bottom:8px"><div class="seg" id="tplPick"><button data-v="new" class="on">新品週</button><button data-v="promo">推廣週</button></div></div>
     <div class="tpl" id="tplGrid"></div>
@@ -490,6 +495,22 @@ $('#saveSet').addEventListener('click', async function(){
     ['#sMeta','#sSl','#sAi','#sNewPw','#sReurl'].forEach(function(s){ $(s).value = ''; });
     say(m, r.first ? '密碼已建立，請再按一次儲存寫入其他設定' : '已儲存', 'ok'); loadStatus();
   } catch (e) { say(m, e.message, 'err'); }
+});
+var rnPlan = null;
+$('#rnScan').addEventListener('click', async function(){
+  $('#rnMsg').textContent = '掃描中（會逐一查 Shopline，請稍等）…'; $('#rnList').innerHTML = ''; $('#rnRun').disabled = true;
+  try {
+    var r = await api('renameScan'); rnPlan = r;
+    $('#rnMsg').textContent = '共 ' + r.total + '：要改 ' + r.rename + '、已有貨號 ' + r.skip + '、找不到 ' + r.nomatch;
+    $('#rnList').innerHTML = r.plan.map(function(p){ return '<div style="padding:3px 0;border-bottom:1px solid var(--line)">' + (p.status === 'rename' ? '<span class="tag p">改</span> ' + esc(p.name) + ' → <b>' + esc(p.newName) + '</b> <span class="muted">' + esc(p.match) + '</span>' : p.status === 'nomatch' ? '<span class="tag x">找不到</span> ' + esc(p.name) : '<span class="tag">略過</span> ' + esc(p.name)) + '</div>'; }).join('');
+    $('#rnRun').disabled = !r.rename;
+  } catch (e) { $('#rnMsg').textContent = e.message; }
+});
+$('#rnRun').addEventListener('click', async function(){
+  if (!rnPlan || !confirm('確定改名 ' + rnPlan.rename + ' 個資料夾？')) return;
+  $('#rnMsg').textContent = '改名中…'; $('#rnRun').disabled = true;
+  try { var r = await api('renameRun', { by: $('#who').value }); $('#rnMsg').textContent = '完成：改了 ' + r.done.length + '，失敗 ' + r.failed.length + '，找不到 ' + r.nomatch.length; $('#rnList').innerHTML = r.done.map(function(d){ return '<div>✔ ' + esc(d.to) + '</div>'; }).join('') + r.failed.map(function(d){ return '<div class="red">✖ ' + esc(d.name) + '：' + esc(d.error) + '</div>'; }).join(''); }
+  catch (e) { $('#rnMsg').textContent = e.message; }
 });
 $('#brandReset').addEventListener('click', function(){ $('#sBrand').value = S.brandDefault || ''; });
 $('#metaCheck').addEventListener('click', async function(){
@@ -652,14 +673,14 @@ function renderProds(){
 }
 function toggleProd(p){
   var i = S.selected.findIndex(function(s){ return s.id === p.id; });
-  if (i >= 0) S.selected.splice(i, 1); else { S.selected.push(p); if (p.title && S.cfg.dropbox && S.imgSrc === 'dbx') dbxFind(p.title); }
+  if (i >= 0) S.selected.splice(i, 1); else { S.selected.push(p); if (p.title && S.cfg.dropbox && S.imgSrc === 'dbx') dbxFind(p.title, p.sku); }
   renderProds(); renderChips(); renderLinkOptions(); renderSlFiles();
 }
-async function dbxFind(title){
+async function dbxFind(title, sku){
   $('#folders').innerHTML = '<div class="muted">找資料夾…</div>'; $('#files').innerHTML = '';
   try {
-    var r = await api('dropboxFind', { title: title });
-    if (r.found) { await dbxLoad(r.path); say($('#pubMsg'), '已開啟 ' + r.folder + (r.color ? ' / ' + r.color : ''), 'ok'); }
+    var r = await api('dropboxFind', { title: title, sku: sku || '' });
+    if (r.found) { await dbxLoad(r.path); say($('#pubMsg'), '已開啟 ' + r.folder + (r.color ? ' / ' + r.color : '') + (r.matchedBy === 'code' ? '' : '（用名稱比對，這個資料夾還沒有貨號）'), 'ok'); }
     else { await dbxLoad(S.dbxPath || S.dbxRoot); say($('#pubMsg'), 'Dropbox 找不到這款的資料夾（掃了 ' + (r.total || 0) + ' 個資料夾），請手動點選', 'err'); }
   } catch (e) { say($('#pubMsg'), e.message, 'err'); dbxLoad(S.dbxPath || S.dbxRoot); }
 }
@@ -673,7 +694,7 @@ function renderChips(){
   renderModels();
   $('#chips').innerHTML = S.selected.map(function(p){ return '<span class="chip"><i data-f="' + esc(p.title) + '" style="cursor:pointer;font-style:normal" title="開啟 Dropbox 資料夾">📁</i> ' + esc(p.sku || p.title) + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
   $$('#chips b').forEach(function(b){ b.addEventListener('click', function(){ toggleProd({ id: b.dataset.id }); }); });
-  $$('#chips i').forEach(function(b){ b.addEventListener('click', function(){ dbxFind(b.dataset.f); }); });
+  $$('#chips i').forEach(function(b){ b.addEventListener('click', function(){ var p = S.selected.filter(function(x){ return x.title === b.dataset.f; })[0]; dbxFind(b.dataset.f, p && p.sku); }); });
 }
 
 /* ---------- 圖片 ---------- */

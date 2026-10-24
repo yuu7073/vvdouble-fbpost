@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25o";
+const VERSION = "2026-10-25p";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -397,10 +397,12 @@ exports.fbpost = onRequest(
         case "dropboxFind": {
           // 依商品名找 Dropbox 資料夾：不靠搜尋，直接走 根目錄 → 日期資料夾 → 分類 → 「OK <商品名>」；分色款再進顏色子資料夾
           const title = String(body.title || "").trim();
-          if (!title) return res.status(400).json({ error: "缺少商品名" });
+          const code = String(body.sku || "").trim().toUpperCase().slice(0, 8);
+          if (!title && !code) return res.status(400).json({ error: "缺少商品名" });
           const m = title.match(/^(.*?)(?:-([^-]{1,6}))?$/);
           const base = (m && m[1] || title).trim(), color = (m && m[2] || "").trim();
-          const norm = (s) => String(s || "").replace(/^ok\s*/i, "").replace(/[\s　《》〈〉「」『』【】()（）]/g, "").toLowerCase();
+          const norm = (s) => String(s || "").replace(/^ok\s*/i, "").replace(/_[0-9A-Z]{6,10}$/i, "").replace(/[\s　《》〈〉「」『』【】()（）]/g, "").toLowerCase();
+          const codeOf = (s) => { const mm = String(s || "").match(/_([0-9A-Z]{6,10})$/i); return mm ? mm[1].toUpperCase() : ""; };
           const nb = norm(base);
           const listFolders = async (path) => {
             let j = await dbxRpc(cfg, "/files/list_folder", { path, limit: 2000 });
@@ -431,10 +433,12 @@ exports.fbpost = onRequest(
               for (const x of items) { if (!/^ok/i.test(x.name) && !norm(x.name).includes(nb)) { try { const deeper = await listFolders(x.path_lower); deeper.forEach((y) => all.push(y)); } catch (e) {} } }
             }
           }
+          const byCode = code ? all.filter((h) => codeOf(h.name) === code) : [];
           const exact = all.filter((h) => norm(h.name) === nb || norm(h.name) === norm(title));
           const partial = all.filter((h) => norm(h.name).includes(nb) || (nb.length >= 6 && nb.includes(norm(h.name)) && norm(h.name).length >= 6));
-          const cand = (exact.length ? exact : partial).sort((a, b) => b.path_lower.localeCompare(a.path_lower));
+          const cand = (byCode.length ? byCode : exact.length ? exact : partial).sort((a, b) => b.path_lower.localeCompare(a.path_lower));
           if (!cand.length) return res.json({ found: false, scanned, total: all.length });
+          const matchedBy = byCode.length ? "code" : exact.length ? "name" : "partial";
           let path = cand[0].path_lower, pickedColor = "";
           try {
             const sub = await dbxRpc(cfg, "/files/list_folder", { path, limit: 200 });
@@ -443,7 +447,67 @@ exports.fbpost = onRequest(
             if (color) { const c = folders.find((e) => norm(e.name).includes(norm(color))); if (c) { path = c.path_lower; pickedColor = c.name; } }
             if (!pickedColor && !files.length && folders.length === 1 && !/^(gif|長條圖)$/i.test(folders[0].name)) { path = folders[0].path_lower; pickedColor = folders[0].name; }
           } catch (e) {}
-          return res.json({ found: true, path, folder: cand[0].name, color: pickedColor, others: cand.slice(1, 5).map((c) => ({ name: c.name, path: c.path_lower })) });
+          return res.json({ found: true, matchedBy, path, folder: cand[0].name, color: pickedColor, others: cand.slice(1, 5).map((c) => ({ name: c.name, path: c.path_lower })) });
+        }
+
+        case "renameScan":
+        case "renameRun": {
+          // 舊資料夾補貨號：OK 品名 → OK 品名_貨號（貨號查 Shopline，取組頭前 8 碼）
+          if (!cfg.shoplineToken) return res.status(400).json({ error: "尚未設定 Shopline Token" });
+          const norm = (s) => String(s || "").replace(/^ok\s*/i, "").replace(/_[0-9A-Z]{6,10}$/i, "").replace(/[\s　《》〈〉「」『』【】()（）]/g, "").toLowerCase();
+          const hasCode = (s) => /_[0-9A-Z]{6,10}$/i.test(String(s || ""));
+          const listFolders = async (path) => {
+            let j = await dbxRpc(cfg, "/files/list_folder", { path, limit: 2000 });
+            let e = j.entries || [];
+            while (j.has_more) { j = await dbxRpc(cfg, "/files/list_folder/continue", { cursor: j.cursor }); e = e.concat(j.entries || []); }
+            return e.filter((x) => x[".tag"] === "folder");
+          };
+          const root = cfg.dropboxRoot || "";
+          const rootFolders = await listFolders(root);
+          let dateDirs = rootFolders.some((x) => /分類/.test(x.name)) ? [{ name: root.split("/").pop(), path_lower: root }] : rootFolders.filter((x) => /^\d{3,4}/.test(x.name));
+          if (body.dates && body.dates.length) dateDirs = dateDirs.filter((d) => body.dates.includes(d.name));
+          const targets = [];
+          for (const d of dateDirs) {
+            const subs = await listFolders(d.path_lower);
+            const cats = subs.filter((x) => /分類/.test(x.name));
+            const pools = cats.length ? cats : [d];
+            for (const t of pools) {
+              const items = t === d ? subs : await listFolders(t.path_lower);
+              for (const x of items) {
+                if (/^(gif|長條圖)$/i.test(x.name)) continue;
+                if (/^ok/i.test(x.name) || x.name.includes("》") || x.name.length >= 8) targets.push(x);
+                else { try { (await listFolders(x.path_lower)).forEach((y) => targets.push(y)); } catch (e) {} }
+              }
+            }
+          }
+          const plan = [];
+          for (const t of targets) {
+            if (hasCode(t.name)) { plan.push({ path: t.path_lower, name: t.name, status: "skip", note: "已有貨號" }); continue; }
+            const q = t.name.replace(/^ok\s*/i, "").trim();
+            let sku = "", match = "";
+            try {
+              const r = await slFetch(cfg.shoplineToken, `/products/search?query=${encodeURIComponent(q.replace(/[《》]/g, " ").slice(0, 60))}&per_page=10&fields[]=items.id&fields[]=items.title_translations&fields[]=items.variations&fields[]=items.sku`);
+              const items = (r.body && r.body.items) || [];
+              const same = items.filter((it) => norm(((it.title_translations || {})["zh-hant"] || "").replace(/-[^-]{1,6}$/, "")) === norm(q));
+              const pick = (same.length ? same : items.filter((it) => norm((it.title_translations || {})["zh-hant"] || "").includes(norm(q))))[0];
+              if (pick) { sku = ((((pick.variations || [])[0] || {}).sku) || pick.sku || "").toUpperCase().slice(0, 8); match = (pick.title_translations || {})["zh-hant"] || ""; }
+            } catch (e) {}
+            if (!/^[0-9A-Z]{6,10}$/.test(sku)) { plan.push({ path: t.path_lower, name: t.name, status: "nomatch", note: "Shopline 找不到" }); continue; }
+            const newName = t.name.replace(/\s+$/, "") + "_" + sku;
+            plan.push({ path: t.path_lower, name: t.name, newName, sku, match, status: "rename" });
+          }
+          if (action === "renameScan") return res.json({ plan, total: plan.length, rename: plan.filter((p) => p.status === "rename").length, nomatch: plan.filter((p) => p.status === "nomatch").length, skip: plan.filter((p) => p.status === "skip").length });
+          // 執行
+          const done = [], failed = [];
+          for (const p of plan.filter((x) => x.status === "rename")) {
+            const to = p.path.replace(/\/[^\/]+$/, "/") + p.newName;
+            try {
+              await dbxRpc(cfg, "/files/move_v2", { from_path: p.path, to_path: to, autorename: false });
+              await db().ref("/fbpost/renames").push({ from: p.path, to, at: Date.now(), by: body.by || "" });
+              done.push({ from: p.name, to: p.newName });
+            } catch (e) { failed.push({ name: p.name, error: String(e.message).slice(0, 120) }); }
+          }
+          return res.json({ done, failed, nomatch: plan.filter((p) => p.status === "nomatch").map((p) => p.name) });
         }
 
         case "dropboxThumbs": {
