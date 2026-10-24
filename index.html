@@ -358,7 +358,7 @@
   </div>
   <div class="card">
     <h2>Dropbox 舊資料夾補貨號</h2>
-    <div class="row"><button id="rnScan">試算</button><button id="rnRun" class="p" disabled>執行改名</button><span class="muted" id="rnMsg"></span></div>
+    <div class="row"><input type="text" id="rnDates" value="1020" placeholder="日期資料夾，逗號分隔" size="14"><button id="rnScan">試算</button><button id="rnRun" class="p" disabled>執行改名</button><span class="muted" id="rnMsg"></span></div>
     <div id="rnList" style="max-height:300px;overflow:auto;margin-top:8px;font-size:12px"></div>
   </div>
   <div class="card">
@@ -500,7 +500,8 @@ var rnPlan = null;
 $('#rnScan').addEventListener('click', async function(){
   $('#rnMsg').textContent = '掃描中（會逐一查 Shopline，請稍等）…'; $('#rnList').innerHTML = ''; $('#rnRun').disabled = true;
   try {
-    var r = await api('renameScan'); rnPlan = r;
+    var dates = $('#rnDates').value.split(/[,，\s]+/).filter(Boolean);
+    var r = await api('renameScan', { dates: dates }); rnPlan = r;
     $('#rnMsg').textContent = '共 ' + r.total + '：要改 ' + r.rename + '、已有貨號 ' + r.skip + '、找不到 ' + r.nomatch;
     $('#rnList').innerHTML = r.plan.map(function(p){ return '<div style="padding:3px 0;border-bottom:1px solid var(--line)">' + (p.status === 'rename' ? '<span class="tag p">改</span> ' + esc(p.name) + ' → <b>' + esc(p.newName) + '</b> <span class="muted">' + esc(p.match) + '</span>' : p.status === 'nomatch' ? '<span class="tag x">找不到</span> ' + esc(p.name) : '<span class="tag">略過</span> ' + esc(p.name)) + '</div>'; }).join('');
     $('#rnRun').disabled = !r.rename;
@@ -509,7 +510,7 @@ $('#rnScan').addEventListener('click', async function(){
 $('#rnRun').addEventListener('click', async function(){
   if (!rnPlan || !confirm('確定改名 ' + rnPlan.rename + ' 個資料夾？')) return;
   $('#rnMsg').textContent = '改名中…'; $('#rnRun').disabled = true;
-  try { var r = await api('renameRun', { by: $('#who').value }); $('#rnMsg').textContent = '完成：改了 ' + r.done.length + '，失敗 ' + r.failed.length + '，找不到 ' + r.nomatch.length; $('#rnList').innerHTML = r.done.map(function(d){ return '<div>✔ ' + esc(d.to) + '</div>'; }).join('') + r.failed.map(function(d){ return '<div class="red">✖ ' + esc(d.name) + '：' + esc(d.error) + '</div>'; }).join(''); }
+  try { var r = await api('renameRun', { by: $('#who').value, dates: $('#rnDates').value.split(/[,，\s]+/).filter(Boolean) }); $('#rnMsg').textContent = '完成：改了 ' + r.done.length + '，失敗 ' + r.failed.length + '，找不到 ' + r.nomatch.length; $('#rnList').innerHTML = r.done.map(function(d){ return '<div>✔ ' + esc(d.to) + '</div>'; }).join('') + r.failed.map(function(d){ return '<div class="red">✖ ' + esc(d.name) + '：' + esc(d.error) + '</div>'; }).join(''); }
   catch (e) { $('#rnMsg').textContent = e.message; }
 });
 $('#brandReset').addEventListener('click', function(){ $('#sBrand').value = S.brandDefault || ''; });
