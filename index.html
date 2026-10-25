@@ -94,6 +94,8 @@
   .sel .it b{position:absolute;top:-6px;right:-6px;background:#fff;border:1px solid var(--line);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px}
   .sel .it small{display:block;font-size:10px;color:var(--mute);text-align:center}
   .sel .it button{width:100%;margin-top:3px}
+  .sel .it .mv{display:flex;gap:2px;margin-top:3px}.sel .it .mv button{margin:0;padding:3px 0;font-size:12px}
+  .sel .it.drag{opacity:.4}.sel .it.over img{outline:2px solid var(--p,#2563eb)}
   textarea#msg{width:100%;min-height:220px;resize:vertical;line-height:1.6}
   .vars{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
   .var{border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap;cursor:pointer;max-height:220px;overflow:auto;background:#fafbfd}
@@ -155,7 +157,7 @@
   .lab .ly input[type=text]{width:100%}
   .lab .ly .cs{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
   .lab .ly .cs input[type=color]{width:28px;height:28px;padding:0;border:1px solid var(--line);border-radius:4px}
-  #labCv{border:1px solid var(--line);border-radius:6px;background:#eee}
+  #labCv{border:1px solid var(--line);border-radius:6px;background:#eee;cursor:grab}
   .pal{display:flex;flex-wrap:wrap;gap:4px}
   .pal span{width:22px;height:22px;border-radius:4px;cursor:pointer;border:2px solid transparent}
   .pal span.on{border-color:var(--ink)}
@@ -424,6 +426,7 @@
       <div>
         <div class="f"><label>版型</label><div class="tpls" id="labTpls"></div></div>
         <div class="f"><label>大標</label><div class="tpls" id="labTitles"></div></div>
+        <div class="f"><label>底圖縮放 <span id="labZoomV"></span>・左右・上下（也可在圖上滾輪縮放、拖曳移動）</label><div class="row"><input type="range" id="labZoom" min="100" max="300" value="100" style="flex:1"><input type="range" id="labCamX" min="-100" max="100" value="0" style="flex:1"><input type="range" id="labCamY" min="-100" max="100" value="0" style="flex:1"></div></div>
         <div class="f" id="labOvOpts" style="display:none"><label>大標顏色・大小 <span id="labOvScaleV"></span>・位置 <span id="labOvDyV"></span></label><div class="row"><input type="color" id="labOvColor" value="#ffffff"><input type="range" id="labOvScale" min="50" max="150" value="100" style="flex:1"><input type="range" id="labOvDy" min="-60" max="20" value="0" style="flex:1"></div></div>
         <div id="labAi" class="muted" style="font-size:12px;min-height:16px;margin-bottom:4px"></div>
         <div id="labLayers"></div>
@@ -678,7 +681,7 @@ async function openSlot(date, slot){
   S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || '';
   $('#msg').value = c.message || ''; $('#extra').value = c.extra || ''; $('#vars').innerHTML = ''; $('#pubMsg').textContent = '';
   $('#linkCustom').value = c.linkCustom || '';
-  if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig }); }); }
+  if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig, cam: im.cam || null }); }); }
   applyType(); renderProds(); renderChips(); renderLinkOptions(); if (c.link) $('#linkSel').value = c.link;
   renderActs(); renderSel(); renderLink(); renderPreview();
   $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; renderCal(); $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' }); S.opening = false;
@@ -835,6 +838,16 @@ async function pickImg(key, name, thumb, src){
   } catch (e) { im.error = e.message; }
   im.loading = false; renderSel();
 }
+function drawCover(ctx, img, W, H, cam){
+  cam = cam || { zoom: 1, x: 0, y: 0 };
+  var r = Math.max(W / img.width, H / img.height) * (cam.zoom || 1), w = img.width * r, h = img.height * r;
+  var ox = (W - w) / 2 + (cam.x || 0) * Math.max(0, (w - W) / 2), oy = (H - h) / 2 + (cam.y || 0) * Math.max(0, (h - H) / 2);
+  ctx.drawImage(img, ox, oy, w, h);
+}
+function rebase(im){
+  // 依 cam 從原圖重切首圖（圖文編輯器拖拉／縮放用）
+  return new Promise(function(res){ if (!im.full) return res(); var img = new Image(); img.onload = function(){ var sp = spec(), c = document.createElement('canvas'); c.width = sp.w; c.height = sp.h; drawCover(c.getContext('2d'), img, sp.w, sp.h, im.cam); im.base = c.toDataURL('image/jpeg', 0.92); im.w = c.width; im.h = c.height; res(); }; img.src = im.full; });
+}
 function processImage(im, srcUrl, idx){
   return new Promise(function(resolve, reject){
     var img = new Image(); img.crossOrigin = 'anonymous';
@@ -843,7 +856,7 @@ function processImage(im, srcUrl, idx){
         var t = TYPES[S.type], sp = spec(), c = document.createElement('canvas'), ctx = c.getContext('2d');
         var crop = !S.noCrop && !(t.firstOnly && idx > 0);
         if (!crop) { var k = Math.min(1, 2048 / Math.max(img.width, img.height)); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); ctx.drawImage(img, 0, 0, c.width, c.height); }
-        else { c.width = sp.w; c.height = sp.h; var r = Math.max(sp.w / img.width, sp.h / img.height); var w = img.width * r, h = img.height * r; ctx.drawImage(img, (sp.w - w) / 2, (sp.h - h) / 2, w, h); }
+        else { c.width = sp.w; c.height = sp.h; drawCover(ctx, img, sp.w, sp.h, im.cam); var fk = Math.min(1, 1600 / Math.max(img.width, img.height)), fc = document.createElement('canvas'); fc.width = Math.round(img.width * fk); fc.height = Math.round(img.height * fk); fc.getContext('2d').drawImage(img, 0, 0, fc.width, fc.height); im.full = fc.toDataURL('image/jpeg', 0.9); im.fw = img.width; im.fh = img.height; }
         im.orig = srcUrl; im.base = c.toDataURL('image/jpeg', 0.92); im.preview = im.lab ? null : im.base; im.w = c.width; im.h = c.height; im.error = '';
         if (im.lab) { drawLabel(im, true); } else { im.b64 = im.base.split(',')[1]; }
         im.mime = 'image/jpeg'; resolve();
@@ -857,11 +870,24 @@ async function reprocessAll(){ for (var i = 0; i < S.images.length; i++) { var i
 function renderSel(){ if (!S.opening) autosave();
   var t = TYPES[S.type];
   $('#sel').innerHTML = S.images.map(function(im, i){
-    return '<div class="it"><img src="' + esc(im.preview || im.thumb || '') + '"><b data-i="' + i + '">✕</b><small>' + (im.loading ? '處理中…' : im.error ? '<span class="red">' + esc(im.error) + '</span>' : (im.w + '×' + im.h)) + '</small>' + (i === 0 && t.label_editor && im.base ? '<button class="sm" data-lab="' + i + '">圖文</button>' : '') + '</div>';
+    return '<div class="it" draggable="true" data-i="' + i + '"><img src="' + esc(im.preview || im.thumb || '') + '"><b data-i="' + i + '">✕</b><small>' + (im.loading ? '處理中…' : im.error ? '<span class="red">' + esc(im.error) + '</span>' : (im.w + '×' + im.h)) + '</small><div class="mv"><button class="sm" data-mv="-1" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + '>◀</button><button class="sm" data-mv="1" data-i="' + i + '"' + (i === S.images.length - 1 ? ' disabled' : '') + '>▶</button></div>' + (i === 0 && t.label_editor && im.base ? '<button class="sm" data-lab="' + i + '">圖文</button>' : '') + '</div>';
   }).join('');
   $$('#sel b').forEach(function(b){ b.addEventListener('click', function(){ S.images.splice(Number(b.dataset.i), 1); reprocessAll(); markPicked(); }); });
   $$('#sel button[data-lab]').forEach(function(b){ b.addEventListener('click', function(){ openLab(Number(b.dataset.lab)); }); });
+  $$('#sel button[data-mv]').forEach(function(b){ b.addEventListener('click', function(){ moveImage(Number(b.dataset.i), Number(b.dataset.i) + Number(b.dataset.mv)); }); });
+  $$('#sel .it').forEach(function(el){
+    el.addEventListener('dragstart', function(e){ S.dragI = Number(el.dataset.i); el.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; });
+    el.addEventListener('dragover', function(e){ e.preventDefault(); el.classList.add('over'); });
+    el.addEventListener('dragleave', function(){ el.classList.remove('over'); });
+    el.addEventListener('drop', function(e){ e.preventDefault(); el.classList.remove('over'); if (S.dragI !== undefined) moveImage(S.dragI, Number(el.dataset.i)); S.dragI = undefined; });
+    el.addEventListener('dragend', function(){ el.classList.remove('drag'); });
+  });
   renderPreview();
+}
+function moveImage(from, to){
+  if (from === to || to < 0 || to >= S.images.length) return;
+  var it = S.images.splice(from, 1)[0]; S.images.splice(to, 0, it);
+  if (from === 0 || to === 0) reprocessAll(); else renderSel();
 }
 
 /* ---------- 首圖圖文（P1 15 版型，直式 678×1028） ---------- */
@@ -939,6 +965,22 @@ function syncOvOpts(){ var o = LAB.ov; $('#labOvOpts').style.display = o ? '' : 
 $('#labOvColor').addEventListener('input', function(){ if (LAB.ov) { LAB.ov.color = $('#labOvColor').value.toUpperCase(); drawLab(); } });
 $('#labOvScale').addEventListener('input', function(){ if (LAB.ov) { LAB.ov.scale = Number($('#labOvScale').value); $('#labOvScaleV').textContent = LAB.ov.scale + '%'; drawLab(); } });
 $('#labOvDy').addEventListener('input', function(){ if (LAB.ov) { LAB.ov.dy = Number($('#labOvDy').value); $('#labOvDyV').textContent = LAB.ov.dy; drawLab(); } });
+function camOf(im){ if (!im.cam) im.cam = { zoom: 1, x: 0, y: 0 }; return im.cam; }
+function syncCam(){ var im = S.images[LAB.idx]; if (!im) return; var c = camOf(im); $('#labZoom').value = Math.round(c.zoom * 100); $('#labZoomV').textContent = Math.round(c.zoom * 100) + '%'; $('#labCamX').value = Math.round(c.x * 100); $('#labCamY').value = Math.round(c.y * 100); }
+var camTimer = null;
+function camChanged(){ var im = S.images[LAB.idx]; if (!im) return; var c = camOf(im); c.zoom = Math.min(3, Math.max(1, c.zoom)); c.x = Math.min(1, Math.max(-1, c.x)); c.y = Math.min(1, Math.max(-1, c.y)); syncCam(); clearTimeout(camTimer); camTimer = setTimeout(function(){ rebase(im).then(drawLab); }, 30); }
+$('#labZoom').addEventListener('input', function(){ var im = S.images[LAB.idx]; if (im) { camOf(im).zoom = Number($('#labZoom').value) / 100; camChanged(); } });
+$('#labCamX').addEventListener('input', function(){ var im = S.images[LAB.idx]; if (im) { camOf(im).x = Number($('#labCamX').value) / 100; camChanged(); } });
+$('#labCamY').addEventListener('input', function(){ var im = S.images[LAB.idx]; if (im) { camOf(im).y = Number($('#labCamY').value) / 100; camChanged(); } });
+(function(){
+  var cv = $('#labCv'), down = null;
+  cv.addEventListener('wheel', function(e){ var im = S.images[LAB.idx]; if (!im || !im.full) return; e.preventDefault(); camOf(im).zoom *= e.deltaY < 0 ? 1.06 : 0.94; camChanged(); }, { passive: false });
+  cv.addEventListener('mousedown', function(e){ var im = S.images[LAB.idx]; if (!im || !im.full) return; down = { x: e.clientX, y: e.clientY, cx: camOf(im).x, cy: camOf(im).y }; e.preventDefault(); });
+  window.addEventListener('mousemove', function(e){ if (!down) return; var im = S.images[LAB.idx]; if (!im) return; var c = camOf(im), r = cv.getBoundingClientRect(), sp = spec(), s = sp.w / r.width;
+    var rr = Math.max(sp.w / (im.fw || sp.w), sp.h / (im.fh || sp.h)) * c.zoom, ovx = Math.max(1, ((im.fw || sp.w) * rr - sp.w) / 2), ovy = Math.max(1, ((im.fh || sp.h) * rr - sp.h) / 2);
+    c.x = down.cx + (e.clientX - down.x) * s / ovx; c.y = down.cy + (e.clientY - down.y) * s / ovy; camChanged(); });
+  window.addEventListener('mouseup', function(){ down = null; });
+})();
 function drawLab(){ var im = S.images[LAB.idx]; if (!im) return; renderLabel($('#labCv'), im.base, LAB); }
 function renderTplThumbs(im){
   var box = $('#labTpls'); box.innerHTML = '<div data-t="0" class="' + (LAB.tpl ? '' : 'on') + '"><canvas></canvas><small>不加</small></div>' + LAYOUTS.map(function(t){ return '<div data-t="' + t.id + '" class="' + (LAB.tpl === t.id ? 'on' : '') + '"><canvas></canvas><small>' + esc(t.name) + '</small></div>'; }).join('');
@@ -983,7 +1025,7 @@ async function openLab(i){
   else { LAB.tpl = 0; LAB.layers = []; LAB.ink = '#FFFFFF'; LAB.scale = 100; LAB.dy = 0; LAB.ov = null; }
   $('#labScale').value = LAB.scale; $('#labScaleV').textContent = LAB.scale + '%'; $('#labDy').value = LAB.dy; $('#labDyV').textContent = LAB.dy; $('#labInkPick').value = LAB.ink.toLowerCase();
   $$('#labInk button').forEach(function(x){ x.classList.toggle('on', x.dataset.v.toLowerCase() === LAB.ink.toLowerCase()); });
-  $('#labModal').classList.add('on'); await loadFont(); renderTplThumbs(im); renderTitleThumbs(im); syncOvOpts(); renderLayerInputs(); drawLab();
+  $('#labModal').classList.add('on'); await loadFont(); syncCam(); renderTplThumbs(im); renderTitleThumbs(im); syncOvOpts(); renderLayerInputs(); drawLab();
   if (!im.lab || !im.lab.layers) { LAB.req++; setLabTpl(1); $$('#labTpls div').forEach(function(x){ x.classList.toggle('on', x.dataset.t === '1'); }); }
 }
 function drawLabel(im, silent){
@@ -1021,10 +1063,13 @@ async function insertActs(){
   for (var i = 0; i < picked.length; i++) {
     var a = picked[i], link = '';
     if (a.url) { try { var r = await api('shorten', { url: withUtm(a.url) }); link = r.short; } catch (e) { link = a.url; } }
-    lines.push('✦ ' + a.name + (link ? '（' + link + '）' : ''));
+    lines.push('✐' + a.name + (link ? ' (' + link + ')' : ''));
   }
-  var t = $('#msg').value.trim(), arr = t.split('\n'), idx = arr.findIndex(function(x){ return /^#/.test(x.trim()); });
-  if (idx >= 0) arr.splice(idx, 0, '', lines.join('\n'), ''); else arr.push('', lines.join('\n'));
+  // 放在最下方（hashtag 之前）；已經有的 ✐ 行先清掉避免重複
+  var t = $('#msg').value.trim(), arr = t.split('\n').filter(function(x){ return !/^✐/.test(x.trim()); });
+  while (arr.length && !arr[arr.length - 1].trim()) arr.pop();
+  var tagStart = arr.length; while (tagStart > 0 && /^\s*(#|$)/.test(arr[tagStart - 1])) tagStart--;
+  if (tagStart < arr.length) arr.splice(tagStart, 0, '', lines.join('\n'), ''); else arr.push('', lines.join('\n'));
   $('#msg').value = arr.join('\n').replace(/\n{3,}/g, '\n\n').trim(); renderPreview(); autosave();
 }
 
@@ -1112,7 +1157,7 @@ function slotData(status){
     type: S.type, status: status, message: $('#msg').value, extra: $('#extra').value, link: $('#linkSel').value, linkCustom: $('#linkCustom').value, shortUrl: S.shortUrl,
     products: S.selected.map(function(p){ return { id: p.id, title: p.title, sku: p.sku, price: p.price, priceSale: p.priceSale, url: p.url, images: p.images, detailImages: p.detailImages, colors: p.colors, sizes: p.sizes || [], material: p.material || '', models: p.models || [], description: (p.description || '').slice(0, 600) }; }),
     skus: S.selected.map(function(p){ return p.sku; }),
-    images: S.images.map(function(im){ return { key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.src === 'sl' ? im.orig : (im.orig ? 'dbx' : ''), lab: im.lab || null }; }),
+    images: S.images.map(function(im){ return { key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.src === 'sl' ? im.orig : (im.orig ? 'dbx' : ''), lab: im.lab || null, cam: im.cam || null }; }),
     thumb: (S.images[0] && (S.images[0].thumb || '')) || '', by: $('#who').value, at: $('#at').value
   };
 }
