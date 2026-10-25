@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25q";
+const VERSION = "2026-10-25r";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -670,6 +670,29 @@ exports.fbpost = onRequest(
           const ref = await db().ref("/fbpost/posts").push(rec);
           if (meta.date && meta.slot) await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).update({ status: isScheduled ? "scheduled" : "published", postId, recId: ref.key, updatedAt: Date.now() });
           return res.json({ ok: true, postId, id: ref.key, scheduled: !!isScheduled });
+        }
+
+        case "limitTest": {
+          // 測多圖上限：上傳 N 張暫存小圖→建「未發布」貼文→刪除。只回報結果，不會出現在粉專。
+          if (!cfg.metaToken || !cfg.pageId) return res.status(400).json({ error: "尚未設定 Meta" });
+          const token = cfg.metaToken, page = cfg.pageId;
+          const tries = Array.isArray(body.tries) && body.tries.length ? body.tries.map(Number) : [30, 20, 15, 11, 10];
+          const maxN = Math.max(...tries);
+          const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+          const ids = [];
+          for (let i = 0; i < maxN; i++) {
+            const j = await fbPost(token, `/${page}/photos`, { published: "false", temporary: "true" }, { buf: png, mime: "image/png", name: `t${i}.png` });
+            ids.push(j.id);
+          }
+          const results = [];
+          for (const n of tries) {
+            try {
+              const j = await fbPost(token, `/${page}/feed`, { message: `limit test ${n}`, published: "false", attached_media: ids.slice(0, n).map((id) => ({ media_fbid: id })) });
+              results.push({ n, ok: true });
+              try { await fbDelete(token, j.id); } catch (e) { results[results.length - 1].deleteError = e.message; }
+            } catch (e) { results.push({ n, ok: false, error: e.message }); }
+          }
+          return res.json({ uploaded: ids.length, results });
         }
 
         case "deletePost": {
