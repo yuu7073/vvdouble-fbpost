@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25u";
+const VERSION = "2026-10-25v";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -641,7 +641,7 @@ exports.fbpost = onRequest(
             const name = r[ci.name]; if (!name) return;
             const start = parseMD(r[ci.start], year); if (!start) return;
             const end = parseMD(r[ci.end], year) || addDays(start, 30);
-            items.push({ row: hi + 2 + i, name: String(name).trim(), type: r[ci.type] || "", start, end, mech: r[ci.mech] || "", note: r[ci.note] || "", url: ci.url >= 0 ? (r[ci.url] || "") : "", startRaw: r[ci.start] || "", endRaw: r[ci.end] || "" });
+            items.push({ row: hi + 2 + i, name: String(name).trim(), type: r[ci.type] || "", start, end, mech: r[ci.mech] || "", note: r[ci.note] || "", url: ((ci.url >= 0 && r[ci.url]) || r.find((v) => /^https?:\/\//.test(String(v || "").trim())) || "").toString().trim(), startRaw: r[ci.start] || "", endRaw: r[ci.end] || "" });
           });
           // 新品上架日期（行銷排程的「新品時程」列）
           let newDates = [];
