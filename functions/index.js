@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26e";
+const VERSION = "2026-10-26f";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -720,6 +720,14 @@ exports.fbpost = onRequest(
           const key = require("crypto").randomBytes(24).toString("hex");
           await cfgRef().update({ syncKey: key });
           return res.json({ key });
+        }
+        case "titlesList": {
+          // 大標 PNG：官網部門/大標
+          const root = cfg.dropboxRoot || ""; const i = root.indexOf("/官網部門");
+          const path = (i >= 0 ? root.slice(0, i + 5) : root) + "/大標";
+          let files = [];
+          try { const j = await dbxRpc(cfg, "/files/list_folder", { path, limit: 500 }); files = (j.entries || []).filter((e) => e[".tag"] === "file" && /\.png$/i.test(e.name)).map((e) => ({ name: e.name.replace(/\.png$/i, ""), path: e.path_lower })); } catch (e) { if (!/not_found/.test(e.message)) throw e; try { await dbxRpc(cfg, "/files/create_folder_v2", { path, autorename: false }); } catch (e2) {} }
+          return res.json({ path, files });
         }
         case "teamsReset": {
           await db().ref("/fbpost/teams/done").remove();
