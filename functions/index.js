@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26b";
+const VERSION = "2026-10-26c";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -701,7 +701,16 @@ exports.fbpost = onRequest(
 
         case "teamsCheck": {
           const r = await msFindTeamChannels(cfg);
-          return res.json({ team: r.team.displayName, display: r.display ? r.display.displayName : null, staff: r.staff ? r.staff.displayName : null, channels: r.channels });
+          const root = (cfg.dropboxRoot || "") + "/" + (cfg.teamsFolder || "門市素材");
+          let rootOk = "", sub = [];
+          try { const j = await dbxRpc(cfg, "/files/list_folder", { path: root, recursive: true, limit: 500 }); sub = (j.entries || []).map((e) => e.path_display); rootOk = "存在，" + sub.length + " 個項目"; } catch (e) { rootOk = /not_found/.test(e.message) ? "不存在（會自動建立）" : e.message.slice(0, 120); }
+          const dd = await db().ref("/fbpost/teams/done").get(); const dv = dd.exists() ? dd.val() : {};
+          const doneN = { display: Object.keys(dv.display || {}).length, staff: Object.keys(dv.staff || {}).length };
+          return res.json({ team: r.team.displayName, display: r.display ? r.display.displayName : null, staff: r.staff ? r.staff.displayName : null, channels: r.channels, root, rootOk, sub: sub.slice(0, 40), doneN });
+        }
+        case "teamsReset": {
+          await db().ref("/fbpost/teams/done").remove();
+          return res.json({ ok: true });
         }
         case "teamsUsers": {
           const u = await msGet(cfg, "/users?$select=displayName,officeLocation,department,jobTitle,mail&$top=200");

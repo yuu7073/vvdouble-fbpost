@@ -368,7 +368,7 @@
       <label>實穿頻道</label><input type="text" id="sTeamsStaff" placeholder="門市-穿搭分享小編請使用"><span></span>
       <label>Dropbox 資料夾</label><input type="text" id="sTeamsFolder" placeholder="門市素材（在根目錄下）"><span></span>
       <label>抓取起日</label><input type="text" id="sTeamsSince" placeholder="2026-09-01"><span id="teamsLast" class="muted"></span>
-      <label></label><div class="row"><button id="teamsCheck">測試連線</button><button id="teamsUsers">人員門市表</button><button id="teamsDry">試跑（不存檔）</button><button id="teamsRun" class="p">同步到 Dropbox</button></div><span></span>
+      <label></label><div class="row"><button id="teamsCheck">測試連線</button><button id="teamsUsers">人員門市表</button><button id="teamsDry">試跑（不存檔）</button><button id="teamsRun" class="p">同步到 Dropbox</button><button id="teamsReset">重置紀錄</button></div><span></span>
     </div>
     <pre id="teamsOut" class="muted" style="white-space:pre-wrap;font-size:12px;max-height:320px;overflow:auto;margin:8px 0 0"></pre>
   </div>
@@ -965,10 +965,11 @@ $('#labApply').addEventListener('click', async function(){
 /* ---------- Teams 同步 ---------- */
 function teamsSay(x){ $('#teamsOut').textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 1); }
 async function teamsSaveFirst(){ await api('setup', { msTenant: $('#sMsTenant').value, msClientId: $('#sMsClient').value, msSecret: $('#sMsSecret').value, teamsTeam: $('#sTeamsTeam').value, teamsChanDisplay: $('#sTeamsDisplay').value, teamsChanStaff: $('#sTeamsStaff').value, teamsFolder: $('#sTeamsFolder').value, teamsSince: $('#sTeamsSince').value }); $('#sMsSecret').value = ''; }
-$('#teamsCheck').addEventListener('click', async function(){ teamsSay('連線中…'); try { await teamsSaveFirst(); var r = await api('teamsCheck'); teamsSay('團隊：' + r.team + '\n陳列頻道：' + (r.display || '找不到') + '\n實穿頻道：' + (r.staff || '找不到') + '\n所有頻道：' + r.channels.join('、')); } catch (e) { teamsSay('錯誤：' + e.message); } });
+$('#teamsCheck').addEventListener('click', async function(){ teamsSay('連線中…'); try { await teamsSaveFirst(); var r = await api('teamsCheck'); teamsSay('團隊：' + r.team + '\n陳列頻道：' + (r.display || '找不到') + '\n實穿頻道：' + (r.staff || '找不到') + '\nDropbox 目標：' + r.root + '（' + r.rootOk + '）\n已處理紀錄：陳列 ' + r.doneN.display + ' 則、實穿 ' + r.doneN.staff + ' 則\n' + (r.sub || []).join('\n') + '\n所有頻道：' + r.channels.join('、')); } catch (e) { teamsSay('錯誤：' + e.message); } });
 $('#teamsUsers').addEventListener('click', async function(){ teamsSay('讀取中…'); try { await teamsSaveFirst(); var r = await api('teamsUsers'); teamsSay(r.users.map(function(u){ return (u.store || '？？') + '\t' + u.name + '\t位置：' + (u.loc || '—') + '\t部門：' + (u.dept || '—') + '\t職稱：' + (u.title || '—'); }).join('\n')); } catch (e) { teamsSay('錯誤：' + e.message); } });
 async function teamsRun(dry){ teamsSay(dry ? '試跑中…' : '同步中…'); var all = [], round = 0, tot = { display: 0, staff: 0 }; try { await teamsSaveFirst(); while (true) { round++; var r = await api('teamsSync', { dry: dry, limit: 40 }); var lines = []; ['display','staff'].forEach(function(k){ var o = r[k]; if (!o) return; tot[k] += o.uploaded; lines.push((k === 'display' ? '【陳列】' : '【實穿】') + ' 訊息 ' + o.processed + ' 則、圖片 ' + o.uploaded + ' 張'); o.log.forEach(function(l){ lines.push(l.error ? '  ✗ ' + l.error : l.skipped ? '  ⚠ ' + l.skipped : '  ' + l.at + ' ' + (l.who || '？') + '（' + l.store + (l.loc ? '／' + l.loc : '') + '）→ ' + (l.files || []).join(', ')); }); }); all = lines.concat(all); teamsSay((r.more ? '還有更多，繼續第 ' + (round + 1) + ' 輪…\n' : '完成：陳列 ' + tot.display + ' 張、實穿 ' + tot.staff + ' 張\n') + all.join('\n')); if (!r.more || dry) break; } if (!all.length) teamsSay('沒有新訊息'); loadStatus && loadStatus(); } catch (e) { teamsSay('錯誤：' + e.message + '\n' + all.join('\n')); } }
 $('#teamsDry').addEventListener('click', function(){ teamsRun(true); });
+$('#teamsReset').addEventListener('click', async function(){ if (!confirm('清除「已處理」紀錄？下次同步會從抓取起日重新檢查所有訊息（Dropbox 已有的檔案不會刪，可能重複）')) return; try { await api('teamsReset'); teamsSay('紀錄已清除'); } catch (e) { teamsSay('錯誤：' + e.message); } });
 $('#teamsRun').addEventListener('click', function(){ teamsRun(false); });
 
 /* ---------- 文案：活動帶入 ---------- */
