@@ -632,11 +632,37 @@ async function openSlot(date, slot){
   if (c.images && c.images.length) { await reloadImages(); }
   if (TYPES[S.type].folder === 'staff' && S.cfg.dropboxStaff) dbxLoad(S.cfg.dropboxStaff); else if (S.cfg.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
 }
+async function dbxRelocate(im){
+  // 路徑失效（資料夾改名）：用貨號找回資料夾，再用檔名對回去
+  var p = S.selected[0]; if (!p) return null;
+  var r = await api('dropboxFind', { title: p.title, sku: p.sku || '' }); if (!r.found) return null;
+  var dirs = [r.path]; if (r.color) dirs.push(r.path.replace(/\/[^\/]+$/, ''));
+  var name = (im.name || im.key.split('/').pop()).toLowerCase();
+  for (var d = 0; d < dirs.length; d++) {
+    var l = await api('dropboxList', { path: dirs[d] });
+    var hit = (l.files || []).filter(function(f){ return f.name.toLowerCase() === name; })[0];
+    if (hit) return hit.path;
+    for (var k = 0; k < (l.folders || []).length; k++) { var l2 = await api('dropboxList', { path: l.folders[k].path }); var h2 = (l2.files || []).filter(function(f){ return f.name.toLowerCase() === name; })[0]; if (h2) return h2.path; }
+  }
+  return null;
+}
 async function reloadImages(){
   for (var i = 0; i < S.images.length; i++) { var im = S.images[i]; if (!im.orig) continue;
-    try { if (im.src === 'dbx' && im.orig.indexOf('data:') !== 0) { var r = await api('dropboxFile', { path: im.key }); im.orig = 'data:' + r.mime + ';base64,' + r.b64; } await processImage(im, im.orig, i); } catch (e) { im.error = e.message; }
+    try {
+      if (im.src === 'dbx' && im.orig.indexOf('data:') !== 0) {
+        var r;
+        try { r = await api('dropboxFile', { path: im.key }); }
+        catch (e) {
+          if (!/not_found/.test(e.message)) throw e;
+          var np = await dbxRelocate(im); if (!np) throw new Error('找不到這張圖（資料夾可能已改名），請重選');
+          im.key = np; r = await api('dropboxFile', { path: np });
+        }
+        im.orig = 'data:' + r.mime + ';base64,' + r.b64;
+      }
+      await processImage(im, im.orig, i);
+    } catch (e) { im.error = e.message; }
     im.loading = false; }
-  renderSel();
+  renderSel(); markPicked();
 }
 $('#backCal').addEventListener('click', function(){ $('#editWrap').classList.add('hide'); window.scrollTo({ top: 0, behavior: 'smooth' }); loadWeek(); });
 $('#type').addEventListener('change', function(){ S.type = $('#type').value; applyType(); reprocessAll(); renderActs(); });
