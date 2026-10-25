@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26s";
+const VERSION = "2026-10-26t";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -763,11 +763,11 @@ exports.fbpost = onRequest(
 
         // ----- 文案 -----
         case "copy": {
+          const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false, storeInfo = "", storeName = "", bodyShape = "", picks = "" } = body;
           // 裝飾符號每篇輪換，避免每篇長一樣
           const pick = (a) => a[Math.floor(Math.random() * a.length)];
           const pfx = prefix === "random" ? pick(["𖤘𖤘", "✧✧", "❥❥", "⟡⟡", "✦✦", "☾☾", "❀❀", "✿✿", "✩✩", "➤➤", "»»", "✎✎", "❁❁", "⋆⋆"]) : prefix;
           const SYM = { bullet: pick(["⛧", "✦", "❀", "✿", "⟡", "✧", "❥", "☾", "✩", "⋆", "𖤐", "❁", "✤"]), heart: pick(["♡", "♥", "❣", "✿", "❀", "♪", "☆", "✧"]), wrap: pick(["ꔛ", "✦", "❁", "⋆", "✿", "❀", "ꕤ", "⟡", "✧"]), dash: pick(["-", "–", "・・・", "｡･ﾟ･", "⋯⋯"]) };
-          const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false, storeInfo = "", storeName = "", bodyShape = "", picks = "" } = body;
           const num = (v) => String(v || "").replace(/[^\d.]/g, "");
           const desc = products.map((p) => {
             const ms = (p.models || []).map((x) => `model ${x.name} ${num(x.height)}/${num(x.weight)} 穿 ${x.size}`).join("；");
