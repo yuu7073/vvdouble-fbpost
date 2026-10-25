@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26o";
+const VERSION = "2026-10-26p";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -727,7 +727,7 @@ exports.fbpost = onRequest(
         case "resolvePicks": {
           // STAFF's PICK：每行一個網址或品名 → 商品全名（含色名）＋單品短網址
           if (!cfg.shoplineToken) return res.status(400).json({ error: "尚未設定 Shopline Token" });
-          const fields = "&fields[]=items.id&fields[]=items.title_translations&fields[]=items.variations&fields[]=items.status";
+          const fields = "&fields[]=items.id&fields[]=items.title_translations&fields[]=items.variations&fields[]=items.status&fields[]=items.variations.fields_translations&fields[]=items.variations.fields";
           const lines = String(body.text || "").split(/\n|,|，/).map((x) => x.trim()).filter(Boolean).slice(0, 20);
           const out = [];
           for (const line of lines) {
@@ -742,7 +742,7 @@ exports.fbpost = onRequest(
                   let pool = [];
                   for (const q of [`/products?sku=${encodeURIComponent(pre)}&per_page=50${fields}`, `/products/search?query=${encodeURIComponent(pre)}&per_page=50${fields}`, `/products/search?query=${encodeURIComponent(H)}&per_page=20${fields}`]) {
                     const r = await slFetch(cfg.shoplineToken, q); pool = pool.concat((r.body && r.body.items) || []);
-                    const hit = pool.find(matchV); if (hit) { items = [hit]; const v = matchV(hit); color = (((v.fields_translations || [])[0] || {})["zh-hant"] || ""); break; }
+                    const hit = pool.find(matchV); if (hit) { items = [hit]; const v = matchV(hit); color = (((v.fields_translations || [])[0] || {})["zh-hant"] || ((v.fields || [])[0] && (v.fields[0]["zh-hant"] || v.fields[0].name)) || ""); break; }
                   }
                   if (!items.length) { const hit2 = pool.find((it) => (it.variations || []).some((v) => String(v.sku || "").toUpperCase().startsWith(pre))); if (hit2) items = [hit2]; }
                 }
