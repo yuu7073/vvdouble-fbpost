@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25v";
+const VERSION = "2026-10-25w";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -207,6 +207,104 @@ async function dbxContent(cfg, path, arg) {
 }
 const IMG_RE = /\.(jpe?g|png|webp|gif)$/i;
 
+
+// ---------- Microsoft Graph（Teams 門市照片同步） ----------
+const MSG = "https://graph.microsoft.com/v1.0";
+const msCache = { token: "", exp: 0 };
+async function msToken(cfg) {
+  if (msCache.token && Date.now() < msCache.exp - 60000) return msCache.token;
+  if (!cfg.msTenant || !cfg.msClientId || !cfg.msSecret) throw new Error("尚未設定 Microsoft 365（租用戶 ID、應用程式 ID、密鑰）");
+  const body = new URLSearchParams({ grant_type: "client_credentials", client_id: cfg.msClientId, client_secret: cfg.msSecret, scope: "https://graph.microsoft.com/.default" });
+  const r = await fetch(`https://login.microsoftonline.com/${cfg.msTenant}/oauth2/v2.0/token`, { method: "POST", body });
+  const j = await r.json().catch(() => ({}));
+  if (!j.access_token) throw new Error("Microsoft 登入失敗：" + (j.error_description || JSON.stringify(j)).slice(0, 200));
+  msCache.token = j.access_token; msCache.exp = Date.now() + (j.expires_in || 3600) * 1000;
+  return j.access_token;
+}
+async function msGet(cfg, url, raw) {
+  const r = await fetch(url.startsWith("http") ? url : MSG + url, { headers: { Authorization: "Bearer " + (await msToken(cfg)) } });
+  if (!r.ok) throw new Error("Graph " + r.status + " " + (await r.text()).slice(0, 200));
+  return raw ? Buffer.from(await r.arrayBuffer()) : r.json();
+}
+const STORE_SHORT = [["忠孝", "忠孝"], ["統一", "統一"], ["桃園", "桃園"], ["ATT", "桃園"], ["新一中", "台中"], ["一中", "台中"], ["台中", "台中"], ["台南", "台南"], ["新天地", "台南"], ["高雄", "高雄"], ["新堀江", "高雄"]];
+function storeShort(loc) { const s = String(loc || ""); for (const [k, v] of STORE_SHORT) if (s.includes(k)) return v; return ""; }
+function tpeDate(iso) { const d = new Date(new Date(iso).getTime() + 8 * 3600000); return { ym: d.toISOString().slice(0, 7), mmddyy: d.toISOString().slice(5, 7) + d.toISOString().slice(8, 10) + d.toISOString().slice(2, 4) }; }
+async function msFindTeamChannels(cfg) {
+  const teamName = cfg.teamsTeam || "門市總彙";
+  const t = await msGet(cfg, `/teams?$filter=displayName eq '${teamName.replace(/'/g, "''")}'`);
+  const team = (t.value || [])[0];
+  if (!team) throw new Error("找不到團隊：" + teamName);
+  const c = await msGet(cfg, `/teams/${team.id}/channels`);
+  const find = (name) => (c.value || []).find((x) => x.displayName.replace(/\s/g, "").includes(String(name).replace(/\s/g, "")));
+  const display = find(cfg.teamsChanDisplay || "陳列回報"), staff = find(cfg.teamsChanStaff || "穿搭分享");
+  return { team, display, staff, channels: (c.value || []).map((x) => x.displayName) };
+}
+const msUserCache = {};
+async function msUser(cfg, id) {
+  if (!id) return { name: "", store: "", loc: "" };
+  if (msUserCache[id]) return msUserCache[id];
+  let u = {};
+  try { u = await msGet(cfg, `/users/${id}?$select=displayName,officeLocation,department,jobTitle`); } catch (e) {}
+  const loc = u.officeLocation || u.department || "";
+  return (msUserCache[id] = { name: (u.displayName || "").trim(), store: storeShort(loc) || storeShort(u.department) || storeShort(u.jobTitle), loc });
+}
+async function dbxEnsureFolder(cfg, path) {
+  try { await dbxRpc(cfg, "/files/create_folder_v2", { path, autorename: false }); } catch (e) { if (!/conflict/.test(e.message)) throw e; }
+}
+async function dbxListNames(cfg, path) {
+  try { const j = await dbxRpc(cfg, "/files/list_folder", { path, recursive: false, limit: 2000 }); let out = (j.entries || []).map((e) => e.name); let cur = j.cursor, more = j.has_more; while (more) { const k = await dbxRpc(cfg, "/files/list_folder/continue", { cursor: cur }); out = out.concat((k.entries || []).map((e) => e.name)); cur = k.cursor; more = k.has_more; } return out; } catch (e) { if (/not_found/.test(e.message)) return []; throw e; }
+}
+async function dbxUpload(cfg, path, buf) {
+  const argStr = JSON.stringify({ path, mode: "add", autorename: true, mute: true }).replace(/[\u007f-￿]/g, (c) => "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4));
+  const r = await fetch(DBX_CONTENT + "/files/upload", { method: "POST", headers: await dbxHeaders(cfg, { "Dropbox-API-Arg": argStr, "Content-Type": "application/octet-stream" }), body: buf });
+  if (!r.ok) throw new Error("Dropbox upload " + r.status + " " + (await r.text()).slice(0, 200));
+  return r.json();
+}
+function extOf(mime, name) { const m = /\.(jpe?g|png|gif|webp|mp4|mov|heic)$/i.exec(name || ""); if (m) return m[0].toLowerCase(); if (/png/.test(mime)) return ".png"; if (/gif/.test(mime)) return ".gif"; if (/webp/.test(mime)) return ".webp"; if (/mp4|video/.test(mime)) return ".mp4"; return ".jpg"; }
+// 同步一個頻道：kind = display（陳列）| staff（實穿）
+async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry) {
+  const doneRef = db().ref(`/fbpost/teams/done/${kind}`);
+  const doneSnap = await doneRef.get(); const done = doneSnap.exists() ? doneSnap.val() : {};
+  const root = (cfg.dropboxRoot || "") + "/" + (cfg.teamsFolder || "門市素材") + "/" + (kind === "display" ? "陳列" : "實穿");
+  const log = [], counters = {};
+  let url = `/teams/${team.id}/channels/${channel.id}/messages?$top=50`, processed = 0, uploaded = 0, stop = false;
+  while (url && !stop) {
+    const page = await msGet(cfg, url);
+    for (const m of page.value || []) {
+      if (m.createdDateTime < since) { stop = true; break; }
+      if (m.messageType !== "message" || done[m.id]) continue;
+      if (processed >= limit) { stop = true; break; }
+      processed++;
+      const imgs = []; const re = /<img[^>]*src="([^"]*hostedContents\/([^"\/]+)\/\$value)"[^>]*>/g; let mm;
+      while ((mm = re.exec(m.body && m.body.content || ""))) imgs.push({ url: mm[1].replace(/&amp;/g, "&"), id: mm[2] });
+      const atts = (m.attachments || []).filter((a) => a.contentType === "reference");
+      if (!imgs.length && !atts.length) { if (!dry) await doneRef.child(m.id).set({ at: m.createdDateTime, n: 0 }); continue; }
+      const user = await msUser(cfg, m.from && m.from.user && m.from.user.id);
+      const d = tpeDate(m.createdDateTime);
+      const store = user.store || "未知門市";
+      const folder = kind === "display" ? `${root}/${d.ym}/${store}` : `${root}/${d.ym}`;
+      const prefix = kind === "display" ? `${store}陳列_${d.mmddyy}_` : `${store}_${user.name}_${d.mmddyy}_`;
+      const ck = folder + "|" + prefix;
+      if (counters[ck] === undefined) { const names = await dbxListNames(cfg, folder); counters[ck] = names.filter((n) => n.startsWith(prefix)).map((n) => Number((/_(\d+)\.[a-z0-9]+$/i.exec(n) || [])[1] || 0)).reduce((a, b) => Math.max(a, b), 0); }
+      const files = [];
+      for (const im of imgs) {
+        try {
+          const buf = dry ? null : await msGet(cfg, im.url, true);
+          counters[ck]++;
+          const name = prefix + counters[ck] + ".jpg";
+          if (!dry) { await dbxEnsureFolder(cfg, folder); await dbxUpload(cfg, folder + "/" + name, buf); }
+          files.push(name); uploaded++;
+        } catch (e) { log.push({ msg: m.id, error: e.message.slice(0, 160) }); }
+      }
+      if (atts.length) log.push({ msg: m.id, skipped: atts.length + " 個附件檔（上傳檔案類型），需另外處理" });
+      log.push({ at: m.createdDateTime.slice(0, 16), who: user.name, store, loc: user.loc, files });
+      if (!dry) await doneRef.child(m.id).set({ at: m.createdDateTime, n: files.length, files });
+    }
+    url = page["@odata.nextLink"] || "";
+  }
+  return { processed, uploaded, log };
+}
+
 // ---------- Meta ----------
 async function fbGet(token, path, params = {}) {
   const u = new URL(GRAPH + path);
@@ -328,7 +426,9 @@ exports.fbpost = onRequest(
       await cfgRef().update({ password: pw, createdAt: Date.now() });
       return res.json({ ok: true, first: true });
     }
-    if (!cfg.password || pw !== cfg.password) return res.status(401).json({ error: cfg.password ? "密碼錯誤" : "尚未設定密碼" });
+    const sk = req.get("X-Sync-Key") || "";
+    const viaSync = action === "teamsSync" && cfg.syncKey && sk === cfg.syncKey;
+    if (!viaSync && (!cfg.password || pw !== cfg.password)) return res.status(401).json({ error: cfg.password ? "密碼錯誤" : "尚未設定密碼" });
 
     try {
       switch (action) {
@@ -342,6 +442,7 @@ exports.fbpost = onRequest(
             dropbox: !!cfg.dropboxRefresh,
             dropboxAppKey: cfg.dropboxAppKey || "",
             dropboxRoot: cfg.dropboxRoot || "",
+            ms: !!(cfg.msTenant && cfg.msClientId && cfg.msSecret), msTenant: cfg.msTenant || "", msClientId: cfg.msClientId || "", teamsTeam: cfg.teamsTeam || "", teamsChanDisplay: cfg.teamsChanDisplay || "", teamsChanStaff: cfg.teamsChanStaff || "", teamsFolder: cfg.teamsFolder || "", teamsSince: cfg.teamsSince || "", teamsLast: cfg.teamsLast || null,
             shopline: !!cfg.shoplineToken,
             claude: !!cfg.anthropicKey,
             claudeModel: cfg.claudeModel || "",
@@ -362,7 +463,7 @@ exports.fbpost = onRequest(
 
         case "setup": {
           // 只更新有送來的欄位；空字串代表不改
-          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "reurlKey", "bitlyToken", "scheduleSheet", "scheduleYear", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "brandRules", "catLinks", "utmSource", "utmMedium", "newPassword"];
+          const allow = ["pageId", "metaToken", "dropboxAppKey", "dropboxRoot", "dropboxStaff", "reurlKey", "bitlyToken", "msTenant", "msClientId", "msSecret", "teamsTeam", "teamsChanDisplay", "teamsChanStaff", "teamsFolder", "teamsSince", "syncKey", "scheduleSheet", "scheduleYear", "shoplineToken", "anthropicKey", "claudeModel", "copyRules", "brandRules", "catLinks", "utmSource", "utmMedium", "newPassword"];
           const upd = {};
           for (const k of allow) {
             if (typeof body[k] === "string" && body[k].trim() !== "") upd[k === "newPassword" ? "password" : k] = body[k].trim();
@@ -592,6 +693,25 @@ exports.fbpost = onRequest(
           return res.json({ variants });
         }
 
+
+        case "teamsCheck": {
+          const r = await msFindTeamChannels(cfg);
+          return res.json({ team: r.team.displayName, display: r.display ? r.display.displayName : null, staff: r.staff ? r.staff.displayName : null, channels: r.channels });
+        }
+        case "teamsUsers": {
+          const u = await msGet(cfg, "/users?$select=displayName,officeLocation,department,jobTitle,mail&$top=200");
+          const users = (u.value || []).map((x) => ({ name: x.displayName, loc: x.officeLocation || "", dept: x.department || "", title: x.jobTitle || "", mail: x.mail || "", store: storeShort(x.officeLocation) || storeShort(x.department) || storeShort(x.jobTitle) }));
+          return res.json({ users });
+        }
+        case "teamsSync": {
+          const r = await msFindTeamChannels(cfg);
+          const since = (body.since || cfg.teamsSince || "2026-09-01") + "T00:00:00Z";
+          const limit = Number(body.limit) || 40, dry = !!body.dry, out = {};
+          if (r.display && body.kind !== "staff") out.display = await teamsSyncChannel(cfg, r.team, r.display, "display", since, limit, dry);
+          if (r.staff && body.kind !== "display") out.staff = await teamsSyncChannel(cfg, r.team, r.staff, "staff", since, limit, dry);
+          if (!dry) await cfgRef().update({ teamsLast: { at: Date.now(), display: out.display ? out.display.uploaded : 0, staff: out.staff ? out.staff.uploaded : 0 } });
+          return res.json(out);
+        }
         case "labelCopy": {
           // 首圖圖文：依版型各欄位角色，用商品資料填短句（JSON）
           const { product = {}, slots = [], tplName = "" } = body;

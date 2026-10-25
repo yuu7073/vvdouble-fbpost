@@ -358,6 +358,21 @@
     </div>
   </div>
   <div class="card">
+    <h2>Microsoft 365（Teams 門市照片）</h2>
+    <div class="set">
+      <label>租用戶 ID</label><input type="text" id="sMsTenant"><span></span>
+      <label>應用程式 ID</label><input type="text" id="sMsClient"><span></span>
+      <label>密鑰</label><input type="password" id="sMsSecret" placeholder="留空＝不更動"><span id="msState" class="muted"></span>
+      <label>團隊</label><input type="text" id="sTeamsTeam" placeholder="門市總彙"><span></span>
+      <label>陳列頻道</label><input type="text" id="sTeamsDisplay" placeholder="門市-陳列回報"><span></span>
+      <label>實穿頻道</label><input type="text" id="sTeamsStaff" placeholder="門市-穿搭分享小編請使用"><span></span>
+      <label>Dropbox 資料夾</label><input type="text" id="sTeamsFolder" placeholder="門市素材（在根目錄下）"><span></span>
+      <label>抓取起日</label><input type="text" id="sTeamsSince" placeholder="2026-09-01"><span id="teamsLast" class="muted"></span>
+      <label></label><div class="row"><button id="teamsCheck">測試連線</button><button id="teamsUsers">人員門市表</button><button id="teamsDry">試跑（不存檔）</button><button id="teamsRun" class="p">同步到 Dropbox</button></div><span></span>
+    </div>
+    <pre id="teamsOut" class="muted" style="white-space:pre-wrap;font-size:12px;max-height:320px;overflow:auto;margin:8px 0 0"></pre>
+  </div>
+  <div class="card">
     <h2>Shopline ／ Claude ／ reurl</h2>
     <div class="set">
       <label>Shopline Token</label><input type="password" id="sSl" placeholder="留空＝不更動"><span></span>
@@ -501,6 +516,8 @@ async function loadStatus(){
     $('#sSheet').value = s.scheduleSheet || ''; $('#sYear').value = s.scheduleYear || ''; $('#svcEmail').textContent = s.serviceEmail || '';
     $('#dbxState').textContent = s.dropbox ? '已授權' : '尚未授權';
     S.dbxRoot = s.dropboxRoot || ''; if (!S.dbxPath) S.dbxPath = S.dbxRoot;
+    $('#sMsTenant').value = s.msTenant || ''; $('#sMsClient').value = s.msClientId || ''; $('#msState').textContent = s.ms ? '已設定' : ''; $('#sTeamsTeam').value = s.teamsTeam || ''; $('#sTeamsDisplay').value = s.teamsChanDisplay || ''; $('#sTeamsStaff').value = s.teamsChanStaff || ''; $('#sTeamsFolder').value = s.teamsFolder || ''; $('#sTeamsSince').value = s.teamsSince || '';
+    $('#teamsLast').textContent = s.teamsLast ? ('上次 ' + fmt(s.teamsLast.at) + '：陳列 ' + s.teamsLast.display + ' 張、實穿 ' + s.teamsLast.staff + ' 張') : '';
     S.tpl = s.templates || DEFAULT_TPL; renderTplGrid();
   } catch (e) { $('#conn').textContent = e.message; }
 }
@@ -508,7 +525,7 @@ $('#saveSet').addEventListener('click', async function(){
   var m = $('#setMsg');
   try {
     var r = await api('setup', {
-      pageId: $('#sPage').value, metaToken: $('#sMeta').value, dropboxAppKey: $('#sDbxKey').value, dropboxRoot: $('#sDbxRoot').value, dropboxStaff: $('#sDbxStaff').value,
+      pageId: $('#sPage').value, metaToken: $('#sMeta').value, dropboxAppKey: $('#sDbxKey').value, dropboxRoot: $('#sDbxRoot').value, dropboxStaff: $('#sDbxStaff').value, msTenant: $('#sMsTenant').value, msClientId: $('#sMsClient').value, msSecret: $('#sMsSecret').value, teamsTeam: $('#sTeamsTeam').value, teamsChanDisplay: $('#sTeamsDisplay').value, teamsChanStaff: $('#sTeamsStaff').value, teamsFolder: $('#sTeamsFolder').value, teamsSince: $('#sTeamsSince').value,
       shoplineToken: $('#sSl').value, anthropicKey: $('#sAi').value, claudeModel: $('#sModel').value, copyRules: $('#sRules').value, brandRules: $('#sBrand').value, catLinks: $('#sCats').value, reurlKey: $('#sReurl').value, bitlyToken: $('#sBitly').value,
       scheduleSheet: $('#sSheet').value, scheduleYear: $('#sYear').value, utmSource: $('#sUtmS').value, utmMedium: $('#sUtmM').value, newPassword: $('#sNewPw').value,
       templates: S.tpl || null
@@ -944,6 +961,15 @@ $('#labApply').addEventListener('click', async function(){
   im.lab = { tpl: LAB.tpl, layers: JSON.parse(JSON.stringify(LAB.layers)), ink: LAB.ink, scale: LAB.scale, dy: LAB.dy };
   await drawLabel(im); $('#labModal').classList.remove('on');
 });
+
+/* ---------- Teams 同步 ---------- */
+function teamsSay(x){ $('#teamsOut').textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 1); }
+async function teamsSaveFirst(){ await api('setup', { msTenant: $('#sMsTenant').value, msClientId: $('#sMsClient').value, msSecret: $('#sMsSecret').value, teamsTeam: $('#sTeamsTeam').value, teamsChanDisplay: $('#sTeamsDisplay').value, teamsChanStaff: $('#sTeamsStaff').value, teamsFolder: $('#sTeamsFolder').value, teamsSince: $('#sTeamsSince').value }); $('#sMsSecret').value = ''; }
+$('#teamsCheck').addEventListener('click', async function(){ teamsSay('連線中…'); try { await teamsSaveFirst(); var r = await api('teamsCheck'); teamsSay('團隊：' + r.team + '\n陳列頻道：' + (r.display || '找不到') + '\n實穿頻道：' + (r.staff || '找不到') + '\n所有頻道：' + r.channels.join('、')); } catch (e) { teamsSay('錯誤：' + e.message); } });
+$('#teamsUsers').addEventListener('click', async function(){ teamsSay('讀取中…'); try { await teamsSaveFirst(); var r = await api('teamsUsers'); teamsSay(r.users.map(function(u){ return (u.store || '？？') + '\t' + u.name + '\t位置：' + (u.loc || '—') + '\t部門：' + (u.dept || '—') + '\t職稱：' + (u.title || '—'); }).join('\n')); } catch (e) { teamsSay('錯誤：' + e.message); } });
+async function teamsRun(dry){ teamsSay(dry ? '試跑中…' : '同步中…'); try { await teamsSaveFirst(); var r = await api('teamsSync', { dry: dry, limit: 40 }); var lines = []; ['display','staff'].forEach(function(k){ var o = r[k]; if (!o) return; lines.push((k === 'display' ? '【陳列】' : '【實穿】') + ' 訊息 ' + o.processed + ' 則、圖片 ' + o.uploaded + ' 張'); o.log.forEach(function(l){ lines.push(l.error ? '  ✗ ' + l.error : l.skipped ? '  ⚠ ' + l.skipped : '  ' + l.at + ' ' + (l.who || '？') + '（' + l.store + (l.loc ? '／' + l.loc : '') + '）→ ' + (l.files || []).join(', ')); }); }); if (!lines.length) lines.push('沒有新訊息'); teamsSay(lines.join('\n')); loadStatus && loadStatus(); } catch (e) { teamsSay('錯誤：' + e.message); } }
+$('#teamsDry').addEventListener('click', function(){ teamsRun(true); });
+$('#teamsRun').addEventListener('click', function(){ teamsRun(false); });
 
 /* ---------- 文案：活動帶入 ---------- */
 function curActs(){ var d = ($('#at').value || '').slice(0, 10) || iso(new Date()); return S.acts.filter(function(a){ return a.start <= d && a.end >= d; }); }
