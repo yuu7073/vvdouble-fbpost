@@ -603,7 +603,7 @@ async function loadWeek(){
   try {
     var r = await api('week', { dates: ds });
     S.week = r.slots || {}; S.weekType = r.weekType || ''; $('#weekType').value = S.weekType;
-    if (!S.acts.length) { try { var a = await api('activities'); S.acts = a.items || []; S.newDates = a.newDates || []; } catch (e) { $('#weekActs').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; } }
+    if (!S.acts.length) { try { var a = await api('activities'); S.acts = a.items || []; S.newDates = a.newDates || []; } catch (e) { S.actsErr = e.message; } }
     renderCal();
   } catch (e) { $('#cal').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
 }
@@ -628,7 +628,7 @@ function renderCal(){
   $$('#cal .cell').forEach(function(el){ el.addEventListener('click', function(){ openSlot(el.dataset.d, el.dataset.s); }); });
   // 本週活動
   var acts = S.acts.filter(function(a){ return a.start <= ds[6] && a.end >= ds[0]; });
-  $('#weekActs').innerHTML = acts.map(function(a){ return '<div class="item"><b>' + esc(a.name) + '</b><span class="muted">' + esc(a.startRaw) + ' – ' + esc(a.endRaw) + (a.url ? '' : '　<span class="red">缺網址</span>') + '</span><span class="muted">' + esc(a.mech) + '</span></div>'; }).join('') || '<span class="muted">本週沒有活動</span>';
+  $('#weekActs').innerHTML = S.actsErr ? '<span class="red">活動明細讀取失敗：' + esc(S.actsErr) + '</span>' : acts.map(function(a){ return '<div class="item"><b>' + esc(a.name) + '</b><span class="muted">' + esc(a.startRaw) + ' – ' + esc(a.endRaw) + (a.url ? '' : '　<span class="red">缺網址</span>') + '</span><span class="muted">' + esc(a.mech) + '</span></div>'; }).join('') || '<span class="muted">本週沒有活動</span>';
   // 素材清單
   var need = {};
   ds.forEach(function(d){ SLOTS.forEach(function(sl){ var c = (S.week[d] || {})[sl]; if (c && c.type && TYPES[c.type] && c.status !== 'published') { var k = TYPES[c.type].note; need[k] = (need[k] || 0) + 1; } }); });
