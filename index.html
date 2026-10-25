@@ -314,7 +314,7 @@
       <span><i class="dot" id="dDbx"></i> Dropbox</span>
       <span><i class="dot" id="dSl"></i> Shopline</span>
       <span><i class="dot" id="dAi"></i> Claude</span>
-      <span><i class="dot" id="dRe"></i> reurl</span>
+      <span><i class="dot" id="dRe"></i> <span id="dReName">短網址</span></span>
       <span class="sp"></span>
       <button id="metaCheck">測試 Meta</button>
     </div>
@@ -351,7 +351,8 @@
       <label>品牌文案鐵律</label><textarea id="sBrand" style="min-height:260px;font-size:12px;line-height:1.5"></textarea><button id="brandReset" class="sm">還原預設</button>
       <label>額外規則</label><textarea id="sRules" style="min-height:60px"></textarea><span></span>
       <label>分類連結</label><textarea id="sCats" style="min-height:70px" placeholder="名稱|網址，一行一個"></textarea><span></span>
-      <label>reurl API Key</label><input type="password" id="sReurl" placeholder="留空＝不更動"><span></span>
+      <label>Bitly Token</label><input type="password" id="sBitly" placeholder="留空＝不更動"><span></span>
+      <label>reurl API Key</label><input type="password" id="sReurl" placeholder="留空＝不更動（有 Bitly 就不用）"><span></span>
     </div>
   </div>
   <div class="card">
@@ -479,7 +480,7 @@ async function loadStatus(){
   try {
     var s = await api('status'); S.cfg = s;
     $('#conn').textContent = '已連線'; $('#ver').textContent = s.version;
-    [['dMeta','meta'],['dDbx','dropbox'],['dSl','shopline'],['dAi','claude'],['dRe','reurl']].forEach(function(p){ $('#' + p[0]).className = 'dot' + (s[p[1]] ? ' on' : ''); });
+    [['dMeta','meta'],['dDbx','dropbox'],['dSl','shopline'],['dAi','claude'],['dRe','reurl']].forEach(function(p){ $('#' + p[0]).className = 'dot' + (s[p[1]] ? ' on' : ''); }); $('#dReName').textContent = s.shortener === 'bitly' ? 'Bitly' : s.shortener === 'reurl' ? 'reurl' : '短網址';
     $('#sPage').value = s.pageId; $('#metaState').textContent = s.meta ? ('已設定' + (s.pageName ? '：' + s.pageName : '') + (s.metaExpires === 0 ? '，永不過期' : '')) : ''; $('#sDbxKey').value = s.dropboxAppKey; $('#sDbxRoot').value = s.dropboxRoot; $('#sDbxStaff').value = s.dropboxStaff || '';
     $('#sModel').value = s.claudeModel; $('#sRules').value = s.copyRules; $('#sCats').value = s.catLinks || ''; $('#sBrand').value = s.brandRules || s.brandRulesDefault || ''; S.brandDefault = s.brandRulesDefault || ''; $('#sUtmS').value = s.utmSource; $('#sUtmM').value = s.utmMedium;
     $('#sSheet').value = s.scheduleSheet || ''; $('#sYear').value = s.scheduleYear || ''; $('#svcEmail').textContent = s.serviceEmail || '';
@@ -493,7 +494,7 @@ $('#saveSet').addEventListener('click', async function(){
   try {
     var r = await api('setup', {
       pageId: $('#sPage').value, metaToken: $('#sMeta').value, dropboxAppKey: $('#sDbxKey').value, dropboxRoot: $('#sDbxRoot').value, dropboxStaff: $('#sDbxStaff').value,
-      shoplineToken: $('#sSl').value, anthropicKey: $('#sAi').value, claudeModel: $('#sModel').value, copyRules: $('#sRules').value, brandRules: $('#sBrand').value, catLinks: $('#sCats').value, reurlKey: $('#sReurl').value,
+      shoplineToken: $('#sSl').value, anthropicKey: $('#sAi').value, claudeModel: $('#sModel').value, copyRules: $('#sRules').value, brandRules: $('#sBrand').value, catLinks: $('#sCats').value, reurlKey: $('#sReurl').value, bitlyToken: $('#sBitly').value,
       scheduleSheet: $('#sSheet').value, scheduleYear: $('#sYear').value, utmSource: $('#sUtmS').value, utmMedium: $('#sUtmM').value, newPassword: $('#sNewPw').value,
       templates: S.tpl || null
     });
@@ -960,7 +961,7 @@ function renderLink(){ $('#linkOut').textContent = (S.shortUrl ? S.shortUrl + ' 
 $('#shortBtn').addEventListener('click', async function(){ var l = currentLink(); if (!l) return; try { var r = await api('shorten', { url: l }); S.shortUrl = r.short; renderLink(); } catch (e) { say($('#pubMsg'), e.message, 'err'); } });
 $('#insLink').addEventListener('click', function(){
   var l = S.shortUrl || currentLink(); if (!l) return;
-  var t = $('#msg').value.replace(/\n?https?:\/\/(www\.vvdouble\.com|reurl\.cc)\S*\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  var t = $('#msg').value.replace(/\n?https?:\/\/(www\.vvdouble\.com|reurl\.cc|bit\.ly)\S*\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   var lines = t.split('\n'), idx = lines.findIndex(function(x){ return /^#/.test(x.trim()); });
   if (idx >= 0) lines.splice(idx, 0, '', l, ''); else lines.push('', l);
   $('#msg').value = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim(); renderPreview();
