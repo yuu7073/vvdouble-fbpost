@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26r";
+const VERSION = "2026-10-26s";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -795,6 +795,16 @@ exports.fbpost = onRequest(
           const key = require("crypto").randomBytes(24).toString("hex");
           await cfgRef().update({ syncKey: key });
           return res.json({ key });
+        }
+        case "uploadImage": {
+          // 本機圖片 → Dropbox 門市素材/上傳/YYYY-MM/，之後當一般 Dropbox 圖用（草稿可還原）
+          const name = String(body.name || "upload.jpg").replace(/[\\/:*?"<>|]/g, "_");
+          const buf = Buffer.from(String(body.b64 || ""), "base64");
+          if (!buf.length) return res.status(400).json({ error: "沒有檔案" });
+          const folder = teamsRoot(cfg) + "/上傳/" + (String(body.ym || "").match(/^\d{4}-\d{2}$/) ? body.ym : new Date().toISOString().slice(0, 7));
+          await dbxEnsureFolder(cfg, folder);
+          const j = await dbxUpload(cfg, folder + "/" + name, buf);
+          return res.json({ path: j.path_lower, name: j.name });
         }
         case "titlesList": {
           // 大標 PNG：官網部門/大標
