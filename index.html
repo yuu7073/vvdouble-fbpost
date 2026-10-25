@@ -1275,7 +1275,7 @@ function autosave(){ if (!S.cur) return; var c = (S.week[S.cur.date] || {})[S.cu
 async function flushAutosave(){
   clearTimeout(S.asTimer); if (!S.asDirty || !S.cur) return; S.asDirty = false;
   var d = slotData('draft'), k = S.cur;
-  try { await api('saveSlot', { date: k.date, slot: k.slot, data: d }); S.week[k.date] = S.week[k.date] || {}; S.week[k.date][k.slot] = Object.assign({}, S.week[k.date][k.slot] || {}, d); } catch (e) { S.asDirty = true; }
+  try { await api('saveSlot', { date: k.date, slot: k.slot, data: d }); S.week[k.date] = S.week[k.date] || {}; S.week[k.date][k.slot] = Object.assign({}, S.week[k.date][k.slot] || {}, d); say($('#pubMsg'), '自動存檔 ' + new Date().toLocaleTimeString('zh-TW', { hour12: false }), 'ok'); } catch (e) { S.asDirty = true; say($('#pubMsg'), '自動存檔失敗：' + e.message, 'err'); }
 }
 $('#msg').addEventListener('input', function(){ renderPreview(); autosave(); });
 $('#extra').addEventListener('input', autosave);
@@ -1286,7 +1286,7 @@ $('#saveDraft').addEventListener('click', async function(){
   var m = $('#pubMsg'), k = curSlotKey(); if (!k) return;
   try {
     if (S.cur && (S.cur.date !== k.date || S.cur.slot !== k.slot)) await api('saveSlot', { date: S.cur.date, slot: S.cur.slot, data: null });
-    await api('saveSlot', { date: k.date, slot: k.slot, data: slotData('draft') }); S.cur = k; say(m, '草稿已存', 'ok'); loadWeek();
+    await api('saveSlot', { date: k.date, slot: k.slot, data: slotData('draft') }); S.cur = k; say(m, '草稿已存 ' + new Date().toLocaleTimeString('zh-TW', { hour12: false }), 'ok'); loadWeek();
   } catch (e) { say(m, e.message, 'err'); }
 });
 $('#delSlot').addEventListener('click', async function(){
