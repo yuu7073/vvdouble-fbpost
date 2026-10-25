@@ -648,6 +648,9 @@ $('#applyTpl').addEventListener('click', async function(){
 /* ---------- 編輯器：開格 ---------- */
 $('#type').innerHTML = Object.keys(TYPES).map(function(k){ return '<option value="' + k + '">' + TYPES[k].label + '</option>'; }).join('');
 async function openSlot(date, slot){
+  if (S.cur && S.cur.date === date && S.cur.slot === slot && !$('#editWrap').classList.contains('hide')) { $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  await flushAutosave();
+  S.opening = true;
   S.cur = { date: date, slot: slot };
   var c = (S.week[date] || {})[slot] || {};
   S.type = c.type || (((S.tpl || DEFAULT_TPL)[effectiveWeekType()] || {})[slot] || [])[(fromIso(date).getDay() + 6) % 7] || 'hero';
@@ -659,7 +662,7 @@ async function openSlot(date, slot){
   if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig }); }); }
   applyType(); renderProds(); renderChips(); renderLinkOptions(); if (c.link) $('#linkSel').value = c.link;
   renderActs(); renderSel(); renderLink(); renderPreview();
-  $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; renderCal(); $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; renderCal(); $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' }); S.opening = false;
   if (c.images && c.images.length) { await reloadImages(); }
   if (TYPES[S.type].folder === 'staff' && S.cfg.dropboxStaff) dbxLoad(S.cfg.dropboxStaff); else if (S.cfg.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
 }
@@ -748,7 +751,7 @@ function renderModels(){
   sel.innerHTML = '<option value="">主要 model（全部）</option>' + names.map(function(n){ return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
   if (names.indexOf(cur) >= 0) sel.value = cur;
 }
-function renderChips(){
+function renderChips(){ if (!S.opening) autosave();
   renderModels();
   $('#chips').innerHTML = S.selected.map(function(p){ return '<span class="chip"><i data-f="' + esc(p.title) + '" style="cursor:pointer;font-style:normal" title="開啟 Dropbox 資料夾">📁</i> ' + esc(p.sku || p.title) + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
   $$('#chips b').forEach(function(b){ b.addEventListener('click', function(){ toggleProd({ id: b.dataset.id }); }); });
@@ -832,7 +835,7 @@ function processImage(im, srcUrl, idx){
   });
 }
 async function reprocessAll(){ for (var i = 0; i < S.images.length; i++) { var im = S.images[i]; if (im.orig) { try { await processImage(im, im.orig, i); } catch (e) {} } } renderSel(); }
-function renderSel(){
+function renderSel(){ if (!S.opening) autosave();
   var t = TYPES[S.type];
   $('#sel').innerHTML = S.images.map(function(im, i){
     return '<div class="it"><img src="' + esc(im.preview || im.thumb || '') + '"><b data-i="' + i + '">✕</b><small>' + (im.loading ? '處理中…' : im.error ? '<span class="red">' + esc(im.error) + '</span>' : (im.w + '×' + im.h)) + '</small>' + (i === 0 && t.label_editor && im.base ? '<button class="sm" data-lab="' + i + '">圖文</button>' : '') + '</div>';
@@ -960,7 +963,7 @@ async function insertActs(){
   }
   var t = $('#msg').value.trim(), arr = t.split('\n'), idx = arr.findIndex(function(x){ return /^#/.test(x.trim()); });
   if (idx >= 0) arr.splice(idx, 0, '', lines.join('\n'), ''); else arr.push('', lines.join('\n'));
-  $('#msg').value = arr.join('\n').replace(/\n{3,}/g, '\n\n').trim(); renderPreview();
+  $('#msg').value = arr.join('\n').replace(/\n{3,}/g, '\n\n').trim(); renderPreview(); autosave();
 }
 
 /* ---------- 文案：AI ＋ 符號 ---------- */
@@ -982,11 +985,11 @@ $('#copyBtn').addEventListener('click', async function(){
     var model = $('#model').value ? '主要 model 是 ' + $('#model').value + '，MODEL 資訊只寫這一位' : '';
     var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
     $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
-    $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); }); });
-    if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); }
+    $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); autosave(); }); });
+    if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); autosave(); }
   } catch (e) { $('#vars').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
 });
-$('#msg').addEventListener('input', renderPreview);
+
 $('#symToggle').addEventListener('click', function(){ $('#symp').classList.toggle('hide'); renderSym(); });
 $$('#symp .st button').forEach(function(b){ b.addEventListener('click', function(){ $$('#symp .st button').forEach(function(x){ x.classList.toggle('on', x === b); }); S.symG = b.dataset.g; S.symCat = ''; renderSym(); }); });
 function symData(){ return S.symG === 'FAV' ? { '常用': S.favs } : (window[S.symG] || {}); }
@@ -1025,7 +1028,7 @@ $('#insLink').addEventListener('click', function(){
   var t = $('#msg').value.replace(/\n?https?:\/\/(www\.vvdouble\.com|reurl\.cc|bit\.ly)\S*\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   var lines = t.split('\n'), idx = lines.findIndex(function(x){ return /^#/.test(x.trim()); });
   if (idx >= 0) lines.splice(idx, 0, '', l, ''); else lines.push('', l);
-  $('#msg').value = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim(); renderPreview();
+  $('#msg').value = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim(); renderPreview(); autosave();
 });
 
 /* ---------- 預覽／儲存／發布 ---------- */
@@ -1051,6 +1054,18 @@ function slotData(status){
     thumb: (S.images[0] && (S.images[0].thumb || '')) || '', by: $('#who').value, at: $('#at').value
   };
 }
+/* 自動存草稿：文案／強調點／圖片／商品一有變動，1.5 秒後靜默存回這一格（已發布／已排程的格不動） */
+S.asTimer = null; S.asDirty = false;
+function autosave(){ if (!S.cur) return; var c = (S.week[S.cur.date] || {})[S.cur.slot] || {}; if (c.status === 'published' || c.status === 'scheduled') return; S.asDirty = true; clearTimeout(S.asTimer); S.asTimer = setTimeout(flushAutosave, 1500); }
+async function flushAutosave(){
+  clearTimeout(S.asTimer); if (!S.asDirty || !S.cur) return; S.asDirty = false;
+  var d = slotData('draft'), k = S.cur;
+  try { await api('saveSlot', { date: k.date, slot: k.slot, data: d }); S.week[k.date] = S.week[k.date] || {}; S.week[k.date][k.slot] = Object.assign({}, S.week[k.date][k.slot] || {}, d); } catch (e) { S.asDirty = true; }
+}
+$('#msg').addEventListener('input', function(){ renderPreview(); autosave(); });
+$('#extra').addEventListener('input', autosave);
+$('#linkCustom').addEventListener('input', autosave);
+window.addEventListener('beforeunload', function(){ if (S.asDirty && S.cur) { try { navigator.sendBeacon && fetch(FN_URL, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', 'X-Tool-Password': $('#pw').value }, body: JSON.stringify(Object.assign({ action: 'saveSlot', date: S.cur.date, slot: S.cur.slot, data: slotData('draft') })) }); } catch (e) {} } });
 function curSlotKey(){ var v = $('#at').value; if (!v) return null; var hh = v.slice(11, 13), mm = v.slice(14, 16); return { date: v.slice(0, 10), slot: hh + mm }; }
 $('#saveDraft').addEventListener('click', async function(){
   var m = $('#pubMsg'), k = curSlotKey(); if (!k) return;
