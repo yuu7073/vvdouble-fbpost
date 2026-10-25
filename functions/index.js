@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25z";
+const VERSION = "2026-10-26a";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -262,7 +262,7 @@ async function dbxUpload(cfg, path, buf) {
   if (!r.ok) throw new Error("Dropbox upload " + r.status + " " + (await r.text()).slice(0, 200));
   return r.json();
 }
-function extOf(mime, name) { const m = /\.(jpe?g|png|gif|webp|mp4|mov|heic)$/i.exec(name || ""); if (m) return m[0].toLowerCase(); if (/png/.test(mime)) return ".png"; if (/gif/.test(mime)) return ".gif"; if (/webp/.test(mime)) return ".webp"; if (/mp4|video/.test(mime)) return ".mp4"; return ".jpg"; }
+function extOf(mime, name) { const m = /\.(jpe?g|jfif|png|gif|webp|mp4|mov|heic)$/i.exec(name || ""); if (m) return m[0].toLowerCase().replace(".jfif", ".jpg").replace(".jpeg", ".jpg"); if (/png/.test(mime)) return ".png"; if (/gif/.test(mime)) return ".gif"; if (/webp/.test(mime)) return ".webp"; if (/mp4|video/.test(mime)) return ".mp4"; return ".jpg"; }
 // 同步一個頻道：kind = display（陳列）| staff（實穿）
 async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry) {
   const doneRef = db().ref(`/fbpost/teams/done/${kind}`);
@@ -290,8 +290,8 @@ async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry) {
       if (counters[ck] === undefined) { const names = await dbxListNames(cfg, folder); counters[ck] = names.filter((n) => n.startsWith(prefix)).map((n) => Number((/_(\d+)\.[a-z0-9]+$/i.exec(n) || [])[1] || 0)).reduce((a, b) => Math.max(a, b), 0); }
       const files = [];
       // 來源：貼在訊息裡的圖（hostedContents）＋上傳檔案（SharePoint 附件，用 shares API 下載）
-      const srcs = imgs.map((im) => ({ url: im.url, name: "" })).concat(atts.filter((a) => /\.(jpe?g|png|gif|webp|heic|mp4|mov)$/i.test(a.name || "")).map((a) => ({ url: `/shares/u!${Buffer.from(a.contentUrl).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-")}/driveItem/content`, name: a.name })));
-      const others = (m.attachments || []).filter((a) => !(a.contentType === "reference" && /\.(jpe?g|png|gif|webp|heic|mp4|mov)$/i.test(a.name || ""))).map((a) => (a.name || "") + "[" + a.contentType + "]");
+      const srcs = imgs.map((im) => ({ url: im.url, name: "" })).concat(atts.filter((a) => /\.(jpe?g|jfif|png|gif|webp|heic|mp4|mov)$/i.test(a.name || "")).map((a) => ({ url: `/shares/u!${Buffer.from(a.contentUrl).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-")}/driveItem/content`, name: a.name })));
+      const others = (m.attachments || []).filter((a) => !(a.contentType === "reference" && /\.(jpe?g|jfif|png|gif|webp|heic|mp4|mov)$/i.test(a.name || ""))).map((a) => (a.name || "") + "[" + a.contentType + "]");
       for (const im of srcs) {
         try {
           const buf = dry ? null : await msGet(cfg, im.url, true);
