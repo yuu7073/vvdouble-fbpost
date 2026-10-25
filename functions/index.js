@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26a";
+const VERSION = "2026-10-26b";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -264,18 +264,18 @@ async function dbxUpload(cfg, path, buf) {
 }
 function extOf(mime, name) { const m = /\.(jpe?g|jfif|png|gif|webp|mp4|mov|heic)$/i.exec(name || ""); if (m) return m[0].toLowerCase().replace(".jfif", ".jpg").replace(".jpeg", ".jpg"); if (/png/.test(mime)) return ".png"; if (/gif/.test(mime)) return ".gif"; if (/webp/.test(mime)) return ".webp"; if (/mp4|video/.test(mime)) return ".mp4"; return ".jpg"; }
 // 同步一個頻道：kind = display（陳列）| staff（實穿）
-async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry) {
+async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry, deadline) {
   const doneRef = db().ref(`/fbpost/teams/done/${kind}`);
   const doneSnap = await doneRef.get(); const done = doneSnap.exists() ? doneSnap.val() : {};
   const root = (cfg.dropboxRoot || "") + "/" + (cfg.teamsFolder || "門市素材") + "/" + (kind === "display" ? "陳列" : "實穿");
   const log = [], counters = {};
-  let url = `/teams/${team.id}/channels/${channel.id}/messages?$top=50`, processed = 0, uploaded = 0, stop = false;
+  let url = `/teams/${team.id}/channels/${channel.id}/messages?$top=50`, processed = 0, uploaded = 0, stop = false, more = false;
   while (url && !stop) {
     const page = await msGet(cfg, url);
     for (const m of page.value || []) {
       if (m.createdDateTime < since) { stop = true; break; }
       if (m.messageType !== "message" || done[m.id]) continue;
-      if (processed >= limit) { stop = true; break; }
+      if (processed >= limit || (deadline && Date.now() > deadline)) { stop = true; more = true; break; }
       processed++;
       const imgs = []; const re = /<img[^>]*src="([^"]*hostedContents\/([^"\/]+)\/\$value)"[^>]*>/g; let mm;
       while ((mm = re.exec(m.body && m.body.content || ""))) imgs.push({ url: mm[1].replace(/&amp;/g, "&"), id: mm[2] });
@@ -307,7 +307,7 @@ async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry) {
     }
     url = page["@odata.nextLink"] || "";
   }
-  return { processed, uploaded, log };
+  return { processed, uploaded, log, more };
 }
 
 // ---------- Meta ----------
@@ -711,9 +711,10 @@ exports.fbpost = onRequest(
         case "teamsSync": {
           const r = await msFindTeamChannels(cfg);
           const since = (body.since || cfg.teamsSince || "2026-09-01") + "T00:00:00Z";
-          const limit = Number(body.limit) || 40, dry = !!body.dry, out = {};
-          if (r.display && body.kind !== "staff") out.display = await teamsSyncChannel(cfg, r.team, r.display, "display", since, limit, dry);
-          if (r.staff && body.kind !== "display") out.staff = await teamsSyncChannel(cfg, r.team, r.staff, "staff", since, limit, dry);
+          const limit = Number(body.limit) || 40, dry = !!body.dry, out = {}, deadline = Date.now() + (dry ? 240 : 150) * 1000;
+          if (r.display && body.kind !== "staff") out.display = await teamsSyncChannel(cfg, r.team, r.display, "display", since, limit, dry, deadline);
+          if (r.staff && body.kind !== "display" && !(out.display && out.display.more)) out.staff = await teamsSyncChannel(cfg, r.team, r.staff, "staff", since, limit, dry, deadline);
+          out.more = !!((out.display && out.display.more) || (out.staff && out.staff.more));
           if (!dry) await cfgRef().update({ teamsLast: { at: Date.now(), display: out.display ? out.display.uploaded : 0, staff: out.staff ? out.staff.uploaded : 0 } });
           return res.json(out);
         }
