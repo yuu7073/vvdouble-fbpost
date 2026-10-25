@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26t";
+const VERSION = "2026-10-26u";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -759,6 +759,28 @@ exports.fbpost = onRequest(
             out.push({ input: line, ok: true, title: title.replace(/^[《〈【][^》〉】]*[》〉】]/, "").replace(/-[^-]{1,6}$/, "").trim(), url: short });
           }
           return res.json({ picks: out });
+        }
+
+        case "copyEdit": {
+          // 照文案裡（ ）內的註記修改：只改註記處，其餘一字不動
+          const { text = "", type = "hero", activities = [], products = [], catLinks = [], storeInfo = "", picks = "" } = body;
+          const info = [
+            activities.length ? "活動連結：\n" + activities.map((a) => `${a.name}→ ${a.url}`).join("\n") : "",
+            catLinks.length ? "分類連結：\n" + catLinks.map((c) => `${c.name}→ ${c.url}`).join("\n") : "",
+            products.length ? "商品資料：\n" + products.map((p) => `【${p.title}】單品網址：${p.link}${p.sizes && p.sizes.length ? "　尺寸：" + p.sizes.join(" / ") : ""}${p.material ? "　材質：" + p.material : ""}${(p.models || []).length ? "　model：" + p.models.map((x) => `${x.name} ${String(x.height || "").replace(/\D/g, "")}/${String(x.weight || "").replace(/\D/g, "")} 穿 ${x.size}`).join("；") : ""}\n${p.description || ""}`).join("\n\n") : "",
+            storeInfo ? "門市資訊：\n" + storeInfo : "",
+            picks ? "STAFF's PICK 清單：\n" + picks : "",
+          ].filter(Boolean).join("\n\n");
+          const system = copySystem(cfg, type) + `\n\n【這次的任務：照註記修改】
+使用者給你一篇文案，裡面有用全形或半形括號寫的「指示」，例如（兩行敘述）、(連結)、（改口語一點）、（補 model 資訊）。
+規則：
+1. 只處理括號指示所在的位置，把指示換成對應內容；其他文字一字不動（符號、空行、順序都保留）。
+2. （連結）要用我提供的連結清單對應：那一行寫的是哪個活動／分類／商品，就用它的網址；對不到就留「(連結)」不要亂編。
+3. （N 行敘述）就寫 N 行，每行 18 字內，內容依這篇的取向和上下文。
+4. 不是指示的括號（例如商品名裡的括號、(統一時代百貨)）不要動。
+5. 只輸出修改後的整篇文案，不加說明、不加「===」、不加任何標題。`;
+          const out = await claude(cfg, system, `文案：\n${text}\n\n可用資料：\n${info || "（無）"}`);
+          return res.json({ text: out.replace(/^===+\n?|\n?===+$/g, "").trim() });
         }
 
         // ----- 文案 -----

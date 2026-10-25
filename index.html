@@ -270,7 +270,8 @@
     </div>
     <div id="vars" class="vars"></div>
     <textarea id="msg" placeholder="文案"></textarea>
-    <div class="symp hide" id="symp">
+    <div class="row" style="margin:6px 0"><button id="editBtn">照註記修改</button><span class="muted" style="font-size:12px">在文案裡用（ ）寫指示，例：（兩行敘述）（連結）</span><span class="sp"></span><span id="editMsg" class="muted"></span></div>
+    <div class="symp" id="symp">
       <div class="st"><button class="on" data-g="EMOJI">Emoji</button><button data-g="SYM">符號</button><button data-g="KAO">顏文字</button><button data-g="FAV">常用</button></div>
       <div class="cats" id="symCats"></div>
       <div class="keys" id="symKeys"></div>
@@ -1187,6 +1188,23 @@ $('#copyBtn').addEventListener('click', async function(){
 });
 
 $('#symToggle').addEventListener('click', function(){ $('#symp').classList.toggle('hide'); renderSym(); });
+renderSym();
+$('#editBtn').addEventListener('click', async function(){
+  var txt = $('#msg').value; if (!txt.trim()) return;
+  $('#editBtn').disabled = true; $('#editMsg').textContent = '修改中…';
+  try {
+    var acts = [], ca = curActs();
+    for (var i = 0; i < ca.length; i++) if (ca[i].url) acts.push({ name: ca[i].name, url: await shortLink(ca[i].url) });
+    var prods = [];
+    for (var j = 0; j < S.selected.length; j++) { var p = S.selected[j]; prods.push({ title: p.title, link: await shortLink(p.url), models: p.models, sizes: p.sizes, material: p.material, description: (p.description || '').slice(0, 400) }); }
+    var cats = catList(); for (var k = 0; k < cats.length; k++) cats[k] = { name: cats[k].name, url: await shortLink(cats[k].url) };
+    var stO = STORES[Number($('#storeSel').value)];
+    var r = await api('copyEdit', { text: txt, type: S.type, activities: acts, products: prods, catLinks: cats, storeInfo: TYPES[S.type].ratioPick ? storeBlock(stO) : '', picks: TYPES[S.type].staffCopy ? $('#picksOut').value.trim() : '' });
+    if (r.text) { $('#msg').value = r.text.trim(); renderPreview(); autosave(); }
+    $('#editMsg').textContent = '';
+  } catch (e) { $('#editMsg').textContent = e.message; }
+  $('#editBtn').disabled = false;
+});
 $$('#symp .st button').forEach(function(b){ b.addEventListener('click', function(){ $$('#symp .st button').forEach(function(x){ x.classList.toggle('on', x === b); }); S.symG = b.dataset.g; S.symCat = ''; renderSym(); }); });
 function symData(){ return S.symG === 'FAV' ? { '常用': S.favs } : (window[S.symG] || {}); }
 function renderSym(){
