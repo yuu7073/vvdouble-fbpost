@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25y";
+const VERSION = "2026-10-25z";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -291,7 +291,7 @@ async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry) {
       const files = [];
       // 來源：貼在訊息裡的圖（hostedContents）＋上傳檔案（SharePoint 附件，用 shares API 下載）
       const srcs = imgs.map((im) => ({ url: im.url, name: "" })).concat(atts.filter((a) => /\.(jpe?g|png|gif|webp|heic|mp4|mov)$/i.test(a.name || "")).map((a) => ({ url: `/shares/u!${Buffer.from(a.contentUrl).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-")}/driveItem/content`, name: a.name })));
-      const other = atts.length - atts.filter((a) => /\.(jpe?g|png|gif|webp|heic|mp4|mov)$/i.test(a.name || "")).length;
+      const others = (m.attachments || []).filter((a) => !(a.contentType === "reference" && /\.(jpe?g|png|gif|webp|heic|mp4|mov)$/i.test(a.name || ""))).map((a) => (a.name || "") + "[" + a.contentType + "]");
       for (const im of srcs) {
         try {
           const buf = dry ? null : await msGet(cfg, im.url, true);
@@ -301,7 +301,7 @@ async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry) {
           files.push(name); uploaded++;
         } catch (e) { log.push({ msg: m.id, error: (im.name || "圖") + "：" + e.message.slice(0, 160) }); }
       }
-      if (other) log.push({ msg: m.id, skipped: other + " 個非圖片／影片附件略過" });
+      if (others.length) log.push({ msg: m.id, skipped: "略過附件：" + others.join("、").slice(0, 300) });
       log.push({ at: m.createdDateTime.slice(0, 16), who: user.name, store, loc: user.loc, files });
       if (!dry) await doneRef.child(m.id).set({ at: m.createdDateTime, n: files.length, files });
     }
