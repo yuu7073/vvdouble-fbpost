@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25w";
+const VERSION = "2026-10-25x";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -231,11 +231,13 @@ function storeShort(loc) { const s = String(loc || ""); for (const [k, v] of STO
 function tpeDate(iso) { const d = new Date(new Date(iso).getTime() + 8 * 3600000); return { ym: d.toISOString().slice(0, 7), mmddyy: d.toISOString().slice(5, 7) + d.toISOString().slice(8, 10) + d.toISOString().slice(2, 4) }; }
 async function msFindTeamChannels(cfg) {
   const teamName = cfg.teamsTeam || "門市總彙";
-  const t = await msGet(cfg, `/teams?$filter=displayName eq '${teamName.replace(/'/g, "''")}'`);
-  const team = (t.value || [])[0];
-  if (!team) throw new Error("找不到團隊：" + teamName);
+  const norm = (s) => String(s || "").replace(/[\s【】\[\]（）()「」]/g, "");
+  let teams = [], url = "/teams?$select=id,displayName&$top=100";
+  while (url) { const p = await msGet(cfg, url); teams = teams.concat(p.value || []); url = p["@odata.nextLink"] || ""; }
+  const team = teams.find((x) => norm(x.displayName) === norm(teamName)) || teams.find((x) => norm(x.displayName).includes(norm(teamName)));
+  if (!team) throw new Error("找不到團隊：" + teamName + "。現有團隊：" + teams.map((x) => x.displayName).join("、"));
   const c = await msGet(cfg, `/teams/${team.id}/channels`);
-  const find = (name) => (c.value || []).find((x) => x.displayName.replace(/\s/g, "").includes(String(name).replace(/\s/g, "")));
+  const find = (name) => (c.value || []).find((x) => norm(x.displayName).includes(norm(name)));
   const display = find(cfg.teamsChanDisplay || "陳列回報"), staff = find(cfg.teamsChanStaff || "穿搭分享");
   return { team, display, staff, channels: (c.value || []).map((x) => x.displayName) };
 }
