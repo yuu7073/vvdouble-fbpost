@@ -254,8 +254,12 @@
   <div class="card">
     <h2><span class="n">4</span>文案</h2>
     <div class="acts" id="acts"></div>
+    <div id="staffBox" class="hide" style="margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
+      <div class="row"><select id="storeSel"><option value="">選門市</option></select><input type="text" id="bodyShape" placeholder="STAFF Body Shape（例：L / XL）" style="max-width:220px"></div>
+      <div class="row" style="margin-top:8px;align-items:flex-start"><textarea id="picksIn" placeholder="STAFF's PICK：每行一個商品網址或品名" style="flex:1;min-height:64px"></textarea><button id="picksGo">整理</button></div>
+      <textarea id="picksOut" placeholder="整理後的清單（可直接改）" style="width:100%;min-height:64px;margin-top:6px" class="hide"></textarea>
+    </div>
     <div class="row" style="margin:8px 0">
-      <select id="storeSel" class="hide"><option value="">選門市</option></select><input type="text" id="bodyShape" class="hide" placeholder="STAFF Body Shape（例：L / XL）" style="max-width:220px">
       <label class="muted" style="font-size:12px">第 3 行</label><select id="line3" style="max-width:260px"></select><select id="pfx"><option value="random">隨機符號</option><option value="最後限貨">最後限貨</option><option value="馬上來看">馬上來看</option><option value="">無前綴</option></select><label style="font-size:13px"><input type="checkbox" id="hashOn"> hashtag</label>
     </div>
     <div class="row" style="margin:8px 0">
@@ -695,7 +699,7 @@ async function openSlot(date, slot){
   S.type = c.type || (((S.tpl || DEFAULT_TPL)[effectiveWeekType()] || {})[slot] || [])[(fromIso(date).getDay() + 6) % 7] || 'hero';
   $('#type').value = S.type;
   $('#at').value = date + 'T' + slot.slice(0,2) + ':' + slot.slice(2);
-  S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store; $('#bodyShape').value = c.bodyShape || '';
+  S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store; $('#bodyShape').value = c.bodyShape || ''; $('#picksIn').value = c.picksIn || ''; $('#picksOut').value = c.picksOut || ''; $('#picksOut').classList.toggle('hide', !c.picksOut);
   $('#msg').value = c.message || ''; $('#extra').value = c.extra || ''; $('#vars').innerHTML = ''; $('#pubMsg').textContent = '';
   $('#linkCustom').value = c.linkCustom || '';
   if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig, cam: im.cam || null }); }); }
@@ -747,12 +751,21 @@ function applyType(){
   $('#cardImg').classList.toggle('hide', !!t.video);
   $('#cardVideo').classList.toggle('hide', !t.video);
   $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : t.min ? '，最少 ' + t.min + ' 張' : '');
-  $('#ratioSeg').classList.toggle('hide', !t.ratioPick); $('#storeSel').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || 's')); });
+  $('#ratioSeg').classList.toggle('hide', !t.ratioPick); $('#staffBox').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $('#picksIn').parentNode.classList.toggle('hide', !t.staffCopy); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || 's')); });
   var tf2 = teamsFolderFor(S.type); if (tf2 && !S.opening) dbxLoad(tf2);
 }
 $('#storeSel').innerHTML = '<option value="">選門市</option>' + STORES.map(function(st, i){ return '<option value="' + i + '">' + st.name + '</option>'; }).join('');
 $('#storeSel').addEventListener('change', function(){ S.store = $('#storeSel').value; autosave(); });
 $('#bodyShape').addEventListener('input', autosave);
+$('#picksIn').addEventListener('input', autosave); $('#picksOut').addEventListener('input', autosave);
+$('#picksGo').addEventListener('click', async function(){
+  var txt = $('#picksIn').value.trim(); if (!txt) return; $('#picksGo').disabled = true; $('#picksGo').textContent = '整理中…';
+  try { var r = await api('resolvePicks', { text: txt, utm: utmQuery() }); var lines = [];
+    r.picks.forEach(function(k){ lines.push(k.ok ? k.title + '\n' + k.url : '（找不到：' + k.input + '）'); });
+    $('#picksOut').value = lines.join('\n'); $('#picksOut').classList.remove('hide'); autosave();
+  } catch (e) { say($('#pubMsg'), e.message, 'err'); }
+  $('#picksGo').disabled = false; $('#picksGo').textContent = '整理';
+});
 function guessStore(){
   // 從第一張圖的檔名猜門市（台中陳列_、台南_乙蘭_）；台中有兩間不猜
   if ($('#storeSel').value || !S.images.length) return;
@@ -1141,7 +1154,7 @@ $('#copyBtn').addEventListener('click', async function(){
     var model = $('#model').value ? '主要 model 是 ' + $('#model').value + '，MODEL 資訊只寫這一位' : '';
     var l3 = line3Pick(); if (l3 && l3.url) l3 = { name: l3.name, url: await shortLink(l3.url) };
     var stO = STORES[Number($('#storeSel').value)], stB = TYPES[S.type].ratioPick ? storeBlock(stO) : '';
-    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, storeInfo: stB, storeName: stO ? stO.name : '', bodyShape: $('#bodyShape').value, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
+    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, storeInfo: stB, storeName: stO ? stO.name : '', bodyShape: $('#bodyShape').value, picks: TYPES[S.type].staffCopy ? $('#picksOut').value.trim() : '', extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
     $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
     $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); autosave(); }); });
     if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); autosave(); }
@@ -1175,6 +1188,7 @@ function renderLinkOptions(){
 }
 $('#linkSel').addEventListener('change', function(){ $('#linkCustom').classList.toggle('hide', $('#linkSel').value !== 'custom'); S.shortUrl = ''; renderLink(); });
 $('#linkCustom').addEventListener('input', function(){ S.shortUrl = ''; renderLink(); });
+function utmQuery(){ var u = withUtm('https://x.com/'); return u.split('?')[1] || ''; }
 function withUtm(base){
   try { var u = new URL(base); u.searchParams.set('utm_source', S.cfg.utmSource || 'fb'); u.searchParams.set('utm_medium', S.cfg.utmMedium || 'ad'); u.searchParams.set('utm_campaign', utmCampaign(publishTs())); return u.toString(); } catch (e) { return ''; }
 }
@@ -1205,7 +1219,7 @@ function renderPreview(){
 }
 function slotData(status){
   return {
-    type: S.type, status: status, ratioOv: S.ratioOv || '', store: S.store || '', bodyShape: $('#bodyShape').value, message: $('#msg').value, extra: $('#extra').value, link: $('#linkSel').value, linkCustom: $('#linkCustom').value, shortUrl: S.shortUrl,
+    type: S.type, status: status, ratioOv: S.ratioOv || '', store: S.store || '', bodyShape: $('#bodyShape').value, picksIn: $('#picksIn').value, picksOut: $('#picksOut').value, message: $('#msg').value, extra: $('#extra').value, link: $('#linkSel').value, linkCustom: $('#linkCustom').value, shortUrl: S.shortUrl,
     products: S.selected.map(function(p){ return { id: p.id, title: p.title, sku: p.sku, price: p.price, priceSale: p.priceSale, url: p.url, images: p.images, detailImages: p.detailImages, colors: p.colors, sizes: p.sizes || [], material: p.material || '', models: p.models || [], description: (p.description || '').slice(0, 600) }; }),
     skus: S.selected.map(function(p){ return p.sku; }),
     images: S.images.map(function(im){ return { key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.src === 'sl' ? im.orig : (im.orig ? 'dbx' : ''), lab: im.lab || null, cam: im.cam || null }; }),

@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26m";
+const VERSION = "2026-10-26n";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -409,7 +409,7 @@ hashtag：只有我說「要 hashtag」才在最後加一行：#VVDOUBLE #大尺
 第 2～4 行：各以 ⛧ 開頭，每行一句來門市試穿的好處，用問句或對話感（例：版型適不適合？穿上鏡子一照就知道！／不用盲買 面料親膚度 彈性現場親手感受／不知道怎麼搭配？來門市讓我們幫妳量身打造OOTD！），要換句不要照抄範例
 一行「-」
 ♡ STAFF's PICK
-每款商品兩行：商品全名（含色名 原樣不改）換行 單品網址；多款就接著列
+每款商品兩行：商品全名（含色名 原樣不改）換行 單品網址；多款就接著列。有給「STAFF's PICK 清單」就直接用清單，不用商品資料
 一行「-」
 ♡ STAFF Body Shape - {STAFF Body Shape}（沒給就省略這行）
 最後接門市資訊兩行（有給才放）
@@ -724,13 +724,47 @@ exports.fbpost = onRequest(
           return res.json({ items: list });
         }
 
+        case "resolvePicks": {
+          // STAFF's PICK：每行一個網址或品名 → 商品全名（含色名）＋單品短網址
+          if (!cfg.shoplineToken) return res.status(400).json({ error: "尚未設定 Shopline Token" });
+          const fields = "&fields[]=items.id&fields[]=items.title_translations&fields[]=items.variations&fields[]=items.status";
+          const lines = String(body.text || "").split(/\n|,|，/).map((x) => x.trim()).filter(Boolean).slice(0, 20);
+          const out = [];
+          for (const line of lines) {
+            let items = [], handle = "", color = "";
+            try {
+              if (/^https?:\/\//.test(line)) {
+                handle = decodeURIComponent((line.split("?")[0].split("/products/")[1] || "").replace(/\/$/, ""));
+                if (/^[0-9a-f]{24}$/i.test(handle)) { const r = await slFetch(cfg.shoplineToken, `/products/${handle}?${fields.slice(1)}`); if (r.body && r.body.id) items = [r.body]; }
+                else {
+                  const pre = handle.split("-")[0].toUpperCase();
+                  const r = await slFetch(cfg.shoplineToken, `/products?sku=${encodeURIComponent(pre)}&per_page=40${fields}`); items = (r.body && r.body.items) || [];
+                  const hit = items.find((it) => (it.variations || []).some((v) => String(v.sku || "").toUpperCase().startsWith(handle.toUpperCase())));
+                  if (hit) { items = [hit]; const v = (hit.variations || []).find((v) => String(v.sku || "").toUpperCase().startsWith(handle.toUpperCase())); color = v ? (((v.fields_translations || [])[0] || {})["zh-hant"] || "") : ""; }
+                  else if (!items.length) { const r2 = await slFetch(cfg.shoplineToken, `/products/search?query=${encodeURIComponent(handle)}&per_page=5${fields}`); items = (r2.body && r2.body.items) || []; }
+                }
+              } else {
+                const r = await slFetch(cfg.shoplineToken, `/products/search?query=${encodeURIComponent(line)}&per_page=5${fields}`); items = (r.body && r.body.items) || [];
+                const m = line.match(/-([^-]{1,6})$/); if (m) color = m[1];
+              }
+            } catch (e) {}
+            const it = items[0];
+            if (!it) { out.push({ input: line, ok: false }); continue; }
+            const title = ((it.title_translations || {})["zh-hant"] || "").trim();
+            const url = "https://www.vvdouble.com/products/" + it.id;
+            let short = url; try { short = await shorten(cfg, url + "?" + (body.utm || "")); } catch (e) { try { short = await shorten(cfg, url); } catch (e2) {} }
+            out.push({ input: line, ok: true, title: title + (color && !title.endsWith(color) ? "-" + color : ""), url: short });
+          }
+          return res.json({ picks: out });
+        }
+
         // ----- 文案 -----
         case "copy": {
           // 裝飾符號每篇輪換，避免每篇長一樣
           const pick = (a) => a[Math.floor(Math.random() * a.length)];
           const pfx = prefix === "random" ? pick(["𖤘𖤘", "✧✧", "❥❥", "⟡⟡", "✦✦", "☾☾", "❀❀", "✿✿", "✩✩", "➤➤", "»»", "✎✎", "❁❁", "⋆⋆"]) : prefix;
           const SYM = { bullet: pick(["⛧", "✦", "❀", "✿", "⟡", "✧", "❥", "☾", "✩", "⋆", "𖤐", "❁", "✤"]), heart: pick(["♡", "♥", "❣", "✿", "❀", "♪", "☆", "✧"]), wrap: pick(["ꔛ", "✦", "❁", "⋆", "✿", "❀", "ꕤ", "⟡", "✧"]), dash: pick(["-", "–", "・・・", "｡･ﾟ･", "⋯⋯"]) };
-          const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false, storeInfo = "", storeName = "", bodyShape = "" } = body;
+          const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false, storeInfo = "", storeName = "", bodyShape = "", picks = "" } = body;
           const num = (v) => String(v || "").replace(/[^\d.]/g, "");
           const desc = products.map((p) => {
             const ms = (p.models || []).map((x) => `model ${x.name} ${num(x.height)}/${num(x.weight)} 穿 ${x.size}`).join("；");
@@ -738,7 +772,7 @@ exports.fbpost = onRequest(
           }).join("\n\n");
           const cats = catLinks.map((c) => `${c.name}→ ${c.url}`).join("\n");
           const l3 = line3 && line3.url ? `第 3 行連結：${line3.name}→ ${line3.url}` : `第 3 行連結：從分類連結挑一個\n分類連結：\n${cats || "（無）"}`;
-          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${pfx || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n${storeInfo ? "門市資訊（原樣照抄，但把 ꔛ 換成這篇的框符號 " + SYM.wrap + "）：\n" + storeInfo + "\n" : ""}這篇用的符號：條列符號「${SYM.bullet}」、心／標題符號「${SYM.heart}」、分隔線「${SYM.dash}」；規則裡寫的 ⛧ ♡ ꔛ - 一律換成這組，3 個版本可以各自再換成別的裝飾符號，不要三版都一樣。\n${storeName ? "門市名：" + storeName + "\n" : ""}${bodyShape ? "STAFF Body Shape：" + bodyShape + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
+          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${pfx || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n${storeInfo ? "門市資訊（原樣照抄，但把 ꔛ 換成這篇的框符號 " + SYM.wrap + "）：\n" + storeInfo + "\n" : ""}這篇用的符號：條列符號「${SYM.bullet}」、心／標題符號「${SYM.heart}」、分隔線「${SYM.dash}」；規則裡寫的 ⛧ ♡ ꔛ - 一律換成這組，3 個版本可以各自再換成別的裝飾符號，不要三版都一樣。\n${storeName ? "門市名：" + storeName + "\n" : ""}${bodyShape ? "STAFF Body Shape：" + bodyShape + "\n" : ""}${picks ? "STAFF's PICK 清單（原樣照抄 不改字 順序不變）：\n" + picks + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
           const text = await claude(cfg, copySystem(cfg, type), user);
           const variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
           return res.json({ variants });
