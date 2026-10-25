@@ -1094,14 +1094,15 @@ function renderActs(){
 async function insertActs(){
   var acts = curActs(), picked = $$('#acts input:checked').map(function(c){ return acts[Number(c.dataset.i)]; }).filter(Boolean);
   if (!picked.length) return;
+  var ACT_SYMS = ['✐', '✎', '✦', '➤', '✧', '❀', '⟡', '✿', '☾'], actSym = ACT_SYMS[Math.floor(Math.random() * ACT_SYMS.length)];
   var lines = [];
   for (var i = 0; i < picked.length; i++) {
     var a = picked[i], link = '';
     if (a.url) { try { var r = await api('shorten', { url: withUtm(a.url) }); link = r.short; } catch (e) { link = a.url; } }
-    lines.push('✐' + a.name + (link ? ' (' + link + ')' : ''));
+    lines.push(actSym + a.name + (link ? ' (' + link + ')' : ''));
   }
   // 放在最下方（hashtag 之前）；已經有的 ✐ 行先清掉避免重複
-  var t = $('#msg').value.trim(), arr = t.split('\n').filter(function(x){ return !/^✐/.test(x.trim()); });
+  var t = $('#msg').value.trim(), arr = t.split('\n').filter(function(x){ return !/^[✐✎✦➤✧❀⟡✿☾]/.test(x.trim()) || !/\(https?:/.test(x); });
   while (arr.length && !arr[arr.length - 1].trim()) arr.pop();
   var tagStart = arr.length; while (tagStart > 0 && /^\s*(#|$)/.test(arr[tagStart - 1])) tagStart--;
   if (tagStart < arr.length) arr.splice(tagStart, 0, '', lines.join('\n'), ''); else arr.push('', lines.join('\n'));

@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26k";
+const VERSION = "2026-10-26l";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -726,6 +726,9 @@ exports.fbpost = onRequest(
 
         // ----- 文案 -----
         case "copy": {
+          // 裝飾符號每篇輪換，避免每篇長一樣
+          const pick = (a) => a[Math.floor(Math.random() * a.length)];
+          const SYM = { bullet: pick(["⛧", "✦", "❀", "✿", "⟡", "✧", "❥", "☾", "✩", "⋆", "𖤐", "❁", "✤"]), heart: pick(["♡", "♥", "❣", "✿", "❀", "♪", "☆", "✧"]), wrap: pick(["ꔛ", "✦", "❁", "⋆", "✿", "❀", "ꕤ", "⟡", "✧"]), dash: pick(["-", "–", "・・・", "｡･ﾟ･", "⋯⋯"]) };
           const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false, storeInfo = "", storeName = "", bodyShape = "" } = body;
           const num = (v) => String(v || "").replace(/[^\d.]/g, "");
           const desc = products.map((p) => {
@@ -734,7 +737,7 @@ exports.fbpost = onRequest(
           }).join("\n\n");
           const cats = catLinks.map((c) => `${c.name}→ ${c.url}`).join("\n");
           const l3 = line3 && line3.url ? `第 3 行連結：${line3.name}→ ${line3.url}` : `第 3 行連結：從分類連結挑一個\n分類連結：\n${cats || "（無）"}`;
-          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${prefix || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n${storeInfo ? "門市資訊（原樣照抄）：\n" + storeInfo + "\n" : ""}${storeName ? "門市名：" + storeName + "\n" : ""}${bodyShape ? "STAFF Body Shape：" + bodyShape + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
+          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${prefix || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n${storeInfo ? "門市資訊（原樣照抄，但把 ꔛ 換成這篇的框符號 " + SYM.wrap + "）：\n" + storeInfo + "\n" : ""}這篇用的符號：條列符號「${SYM.bullet}」、心／標題符號「${SYM.heart}」、分隔線「${SYM.dash}」；規則裡寫的 ⛧ ♡ ꔛ - 一律換成這組，3 個版本可以各自再換成別的裝飾符號，不要三版都一樣。\n${storeName ? "門市名：" + storeName + "\n" : ""}${bodyShape ? "STAFF Body Shape：" + bodyShape + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
           const text = await claude(cfg, copySystem(cfg, type), user);
           const variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
           return res.json({ variants });
