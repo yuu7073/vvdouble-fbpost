@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26d";
+const VERSION = "2026-10-26e";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -715,6 +715,11 @@ exports.fbpost = onRequest(
           const dd = await db().ref("/fbpost/teams/done").get(); const dv = dd.exists() ? dd.val() : {};
           const doneN = { display: Object.keys(dv.display || {}).length, staff: Object.keys(dv.staff || {}).length };
           return res.json({ team: r.team.displayName, display: r.display ? r.display.displayName : null, staff: r.staff ? r.staff.displayName : null, channels: r.channels, root, rootOk, sub: sub.slice(0, 40), doneN });
+        }
+        case "syncKeyNew": {
+          const key = require("crypto").randomBytes(24).toString("hex");
+          await cfgRef().update({ syncKey: key });
+          return res.json({ key });
         }
         case "teamsReset": {
           await db().ref("/fbpost/teams/done").remove();
