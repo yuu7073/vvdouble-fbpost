@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26f";
+const VERSION = "2026-10-26g";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -557,8 +557,22 @@ exports.fbpost = onRequest(
           // 1) 決定要掃的「日期資料夾」清單
           let dateDirs = [];
           const rootFolders = await listFolders(root);
-          if (rootFolders.some((x) => isCat(x.name))) dateDirs = [{ name: root.split("/").pop(), path_lower: root }];
-          else dateDirs = rootFolders.filter((x) => isDate(x.name)).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 6);
+          if (rootFolders.some((x) => isCat(x.name))) dateDirs = [{ name: root.split("/").pop(), path_lower: root, key: "9999" + root.split("/").pop() }];
+          else dateDirs = rootFolders.filter((x) => isDate(x.name)).map((x) => Object.assign({ key: "9999" + x.name }, x));
+          // 官網部門底下：直接的日期資料夾（如 1020）＋ 年份資料夾（如 2026）裡的日期資料夾（如 0825），依新到舊
+          const di = root.indexOf("/官網部門");
+          if (di >= 0) {
+            const dept = root.slice(0, di + 5);
+            try {
+              const top = await listFolders(dept);
+              for (const x of top) {
+                if (dateDirs.some((d) => d.path_lower === x.path_lower)) continue;
+                if (/^20\d{2}$/.test(x.name)) { try { (await listFolders(x.path_lower)).filter((y) => /^\d{4}/.test(y.name)).forEach((y) => dateDirs.push(Object.assign({ key: x.name + y.name.slice(0, 4) }, y))); } catch (e) {} }
+                else if (/^\d{4}/.test(x.name)) dateDirs.push(Object.assign({ key: "2099" + x.name.slice(0, 4) }, x));
+              }
+            } catch (e) {}
+          }
+          dateDirs = dateDirs.filter((d, i, a) => a.findIndex((z) => z.path_lower === d.path_lower) === i).sort((a, b) => b.key.localeCompare(a.key)).slice(0, 8);
           if (!dateDirs.length) dateDirs = rootFolders.slice(0, 6);
           // 2) 每個日期資料夾 → 分類層（沒有就用日期資料夾本身）→ 收集商品資料夾
           const scanned = [], all = [];
