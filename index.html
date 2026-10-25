@@ -231,7 +231,7 @@
     <h2><span class="n">3</span>圖片 <span class="muted" id="imgHint"></span></h2>
     <div class="row" style="margin-bottom:8px">
       <div class="seg" id="imgSrc"><button data-v="dbx" class="on">Dropbox</button><button data-v="sl">商品頁圖</button></div><button id="upBtn">上傳</button><input type="file" id="upFile" accept="image/*" multiple class="hide">
-      <div class="seg hide" id="ratioSeg"><button data-v="s" class="on">1:1</button><button data-v="v">直式</button></div>
+      <div class="seg hide" id="ratioSeg"><button data-v="h">橫式</button><button data-v="s">1:1</button><button data-v="v">直式</button></div>
       <label class="muted"><input type="checkbox" id="noCrop"> 不裁切</label>
       <span class="sp"></span>
       <button id="dbxUp">上一層</button>
@@ -517,7 +517,7 @@ function taipei(ts){ var o = {}; new Intl.DateTimeFormat('en-US',{timeZone:'Asia
 function utmCampaign(ts){ var p = taipei(ts); return p.month + p.day + p.year + '_' + p.hour + p.minute; }
 function fmt(ts){ var d = new Date(ts); return d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
 function publishTs(){ return $('#at').value ? new Date($('#at').value).getTime() : Date.now(); }
-function spec(){ var t = TYPES[S.type] || {}; return RATIO[(t.ratioPick && S.ratioOv) || t.ratio || 'h']; }
+function spec(){ var t = TYPES[S.type] || {}; return RATIO[(!t.video && S.ratioOv) || t.ratio || 'h']; }
 function go(t){ $$('.tabs button').forEach(function(x){ x.classList.toggle('on', x.dataset.t === t); }); $$('.pane').forEach(function(p){ p.classList.toggle('on', p.id === 'pane-' + t); }); }
 $$('.tabs button').forEach(function(b){ b.addEventListener('click', function(){
   go(b.dataset.t);
@@ -751,7 +751,7 @@ function applyType(){
   $('#cardImg').classList.toggle('hide', !!t.video);
   $('#cardVideo').classList.toggle('hide', !t.video);
   $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : t.min ? '，最少 ' + t.min + ' 張' : '');
-  $('#ratioSeg').classList.toggle('hide', !t.ratioPick); $('#staffBox').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $('#picksIn').parentNode.classList.toggle('hide', !t.staffCopy); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || 's')); });
+  $('#ratioSeg').classList.toggle('hide', !!t.video); $('#staffBox').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $('#picksIn').parentNode.classList.toggle('hide', !t.staffCopy); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || t.ratio || 'h')); });
   var tf2 = teamsFolderFor(S.type); if (tf2 && !S.opening) dbxLoad(tf2);
 }
 $('#storeSel').innerHTML = '<option value="">選門市</option>' + STORES.map(function(st, i){ return '<option value="' + i + '">' + st.name + '</option>'; }).join('');
