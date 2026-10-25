@@ -324,7 +324,13 @@
     <h2>Meta</h2>
     <div class="set">
       <label>粉專 ID</label><input type="text" id="sPage"><span></span>
-      <label>Page Access Token</label><input type="password" id="sMeta" placeholder="留空＝不更動"><span></span>
+      <label>Page Access Token</label><input type="password" id="sMeta" placeholder="留空＝不更動"><span id="metaState" class="muted"></span>
+    </div>
+    <div class="set" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      <label>換永久 Token</label><span class="muted">App 密鑰＋測試工具的短期 Token，後端換成永久粉專 Token</span><span></span>
+      <label>App ID</label><input type="text" id="xAppId" value="2191182477592657"><span></span>
+      <label>App 密鑰</label><input type="password" id="xSecret"><span></span>
+      <label>短期 Token</label><input type="password" id="xUser"><button id="xGo" class="p">換</button>
     </div>
   </div>
   <div class="card">
@@ -474,7 +480,7 @@ async function loadStatus(){
     var s = await api('status'); S.cfg = s;
     $('#conn').textContent = '已連線'; $('#ver').textContent = s.version;
     [['dMeta','meta'],['dDbx','dropbox'],['dSl','shopline'],['dAi','claude'],['dRe','reurl']].forEach(function(p){ $('#' + p[0]).className = 'dot' + (s[p[1]] ? ' on' : ''); });
-    $('#sPage').value = s.pageId; $('#sDbxKey').value = s.dropboxAppKey; $('#sDbxRoot').value = s.dropboxRoot; $('#sDbxStaff').value = s.dropboxStaff || '';
+    $('#sPage').value = s.pageId; $('#metaState').textContent = s.meta ? ('已設定' + (s.pageName ? '：' + s.pageName : '') + (s.metaExpires === 0 ? '，永不過期' : '')) : ''; $('#sDbxKey').value = s.dropboxAppKey; $('#sDbxRoot').value = s.dropboxRoot; $('#sDbxStaff').value = s.dropboxStaff || '';
     $('#sModel').value = s.claudeModel; $('#sRules').value = s.copyRules; $('#sCats').value = s.catLinks || ''; $('#sBrand').value = s.brandRules || s.brandRulesDefault || ''; S.brandDefault = s.brandRulesDefault || ''; $('#sUtmS').value = s.utmSource; $('#sUtmM').value = s.utmMedium;
     $('#sSheet').value = s.scheduleSheet || ''; $('#sYear').value = s.scheduleYear || ''; $('#svcEmail').textContent = s.serviceEmail || '';
     $('#dbxState').textContent = s.dropbox ? '已授權' : '尚未授權';
@@ -514,6 +520,15 @@ $('#rnRun').addEventListener('click', async function(){
   catch (e) { $('#rnMsg').textContent = e.message; }
 });
 $('#brandReset').addEventListener('click', function(){ $('#sBrand').value = S.brandDefault || ''; });
+$('#xGo').addEventListener('click', async function(){
+  var m = $('#setMsg'); say(m, '交換中…');
+  try {
+    var r = await api('metaExchange', { appId: $('#xAppId').value.trim(), appSecret: $('#xSecret').value.trim(), userToken: $('#xUser').value.trim(), pageId: $('#sPage').value.trim() });
+    $('#xSecret').value = ''; $('#xUser').value = '';
+    if (r.ok) { say(m, '已存永久 Token：' + r.page.name + '（' + r.page.id + '）' + (r.expires === 0 ? '，永不過期' : ''), 'ok'); loadStatus(); }
+    else { say(m, r.error + '：' + (r.pages || []).map(function(p){ return p.name + ' ' + p.id; }).join('、'), 'err'); }
+  } catch (e) { say(m, e.message, 'err'); }
+});
 $('#metaCheck').addEventListener('click', async function(){
   var m = $('#setMsg');
   try { var r = await api('metaCheck'); say(m, r.ok ? ('粉專：' + r.page.name + '（' + r.page.fan_count + ' 人按讚）') : r.error, r.ok ? 'ok' : 'err'); } catch (e) { say(m, e.message, 'err'); }

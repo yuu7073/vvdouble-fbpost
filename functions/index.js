@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25p";
+const VERSION = "2026-10-25q";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -328,6 +328,8 @@ exports.fbpost = onRequest(
             version: VERSION,
             meta: !!(cfg.metaToken && cfg.pageId),
             pageId: cfg.pageId || "",
+            pageName: cfg.pageName || "",
+            metaExpires: cfg.metaExpires === undefined ? null : cfg.metaExpires,
             dropbox: !!cfg.dropboxRefresh,
             dropboxAppKey: cfg.dropboxAppKey || "",
             dropboxRoot: cfg.dropboxRoot || "",
@@ -361,6 +363,22 @@ exports.fbpost = onRequest(
           upd.updatedAt = Date.now();
           await cfgRef().update(upd);
           return res.json({ ok: true });
+        }
+
+        case "metaExchange": {
+          // 短期用戶 Token → 長期用戶 Token → 永久粉專 Token（全程後端，不回傳 token）
+          const { appId, appSecret, userToken, pageId } = body;
+          if (!appId || !appSecret || !userToken) return res.status(400).json({ error: "App ID、App 密鑰、短期 Token 都要填" });
+          const ex = await (await fetch(`${GRAPH}/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(appSecret)}&fb_exchange_token=${encodeURIComponent(userToken)}`)).json();
+          if (!ex.access_token) return res.status(400).json({ error: "換長期 Token 失敗：" + JSON.stringify(ex).slice(0, 200) });
+          const acc = await fbGet(ex.access_token, "/me/accounts", { fields: "id,name,access_token,tasks", limit: 50 });
+          const pages = (acc.data || []).map((p) => ({ id: p.id, name: p.name, tasks: p.tasks || [] }));
+          const want = pageId || cfg.pageId || "";
+          const pick = (acc.data || []).find((p) => p.id === want) || (acc.data || []).find((p) => /^VV Double$/i.test(p.name));
+          if (!pick) return res.json({ ok: false, pages, error: "找不到指定粉專，請選一個" });
+          const info = await fbGet(pick.access_token, "/debug_token", { input_token: pick.access_token, access_token: `${appId}|${appSecret}` }).catch(() => null);
+          await cfgRef().update({ metaToken: pick.access_token, pageId: pick.id, pageName: pick.name, metaAppId: String(appId), metaTokenAt: Date.now(), metaExpires: info && info.data ? (info.data.expires_at || 0) : null });
+          return res.json({ ok: true, page: { id: pick.id, name: pick.name }, expires: info && info.data ? info.data.expires_at : null, pages });
         }
 
         case "metaCheck": {
