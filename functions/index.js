@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26n";
+const VERSION = "2026-10-26o";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -737,11 +737,14 @@ exports.fbpost = onRequest(
                 handle = decodeURIComponent((line.split("?")[0].split("/products/")[1] || "").replace(/\/$/, ""));
                 if (/^[0-9a-f]{24}$/i.test(handle)) { const r = await slFetch(cfg.shoplineToken, `/products/${handle}?${fields.slice(1)}`); if (r.body && r.body.id) items = [r.body]; }
                 else {
-                  const pre = handle.split("-")[0].toUpperCase();
-                  const r = await slFetch(cfg.shoplineToken, `/products?sku=${encodeURIComponent(pre)}&per_page=40${fields}`); items = (r.body && r.body.items) || [];
-                  const hit = items.find((it) => (it.variations || []).some((v) => String(v.sku || "").toUpperCase().startsWith(handle.toUpperCase())));
-                  if (hit) { items = [hit]; const v = (hit.variations || []).find((v) => String(v.sku || "").toUpperCase().startsWith(handle.toUpperCase())); color = v ? (((v.fields_translations || [])[0] || {})["zh-hant"] || "") : ""; }
-                  else if (!items.length) { const r2 = await slFetch(cfg.shoplineToken, `/products/search?query=${encodeURIComponent(handle)}&per_page=5${fields}`); items = (r2.body && r2.body.items) || []; }
+                  const H = handle.toUpperCase(), pre = H.split("-")[0];
+                  const matchV = (it) => (it.variations || []).find((v) => String(v.sku || "").toUpperCase().startsWith(H));
+                  let pool = [];
+                  for (const q of [`/products?sku=${encodeURIComponent(pre)}&per_page=50${fields}`, `/products/search?query=${encodeURIComponent(pre)}&per_page=50${fields}`, `/products/search?query=${encodeURIComponent(H)}&per_page=20${fields}`]) {
+                    const r = await slFetch(cfg.shoplineToken, q); pool = pool.concat((r.body && r.body.items) || []);
+                    const hit = pool.find(matchV); if (hit) { items = [hit]; const v = matchV(hit); color = (((v.fields_translations || [])[0] || {})["zh-hant"] || ""); break; }
+                  }
+                  if (!items.length) { const hit2 = pool.find((it) => (it.variations || []).some((v) => String(v.sku || "").toUpperCase().startsWith(pre))); if (hit2) items = [hit2]; }
                 }
               } else {
                 const r = await slFetch(cfg.shoplineToken, `/products/search?query=${encodeURIComponent(line)}&per_page=5${fields}`); items = (r.body && r.body.items) || [];
