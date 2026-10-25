@@ -255,7 +255,7 @@
     <h2><span class="n">4</span>文案</h2>
     <div class="acts" id="acts"></div>
     <div class="row" style="margin:8px 0">
-      <select id="storeSel" class="hide"><option value="">選門市</option></select>
+      <select id="storeSel" class="hide"><option value="">選門市</option></select><input type="text" id="bodyShape" class="hide" placeholder="STAFF Body Shape（例：L / XL）" style="max-width:220px">
       <label class="muted" style="font-size:12px">第 3 行</label><select id="line3" style="max-width:260px"></select><select id="pfx"><option value="𖤘𖤘">𖤘𖤘</option><option value="最後限貨">最後限貨</option><option value="馬上來看">馬上來看</option><option value="">無前綴</option></select><label style="font-size:13px"><input type="checkbox" id="hashOn"> hashtag</label>
     </div>
     <div class="row" style="margin:8px 0">
@@ -461,7 +461,7 @@ var TYPES = {
   promo_dm:    { label:'活動DM貼文',   ratio:'h', max:0, min:4, prod:true,  note:'當週活動 banner 1200×800 ＋ 新品照', firstOnly:true },
   weekly:      { label:'當周活動',     ratio:'s', max:1,  prod:false, note:'1:1', act:true },
   hero:        { label:'主推商品',     ratio:'v', max:0, min:4, prod:true,  note:'直式首圖 ＋ 細節圖', firstOnly:true, label_editor:true },
-  staff:       { label:'實穿照',       ratio:'s', max:0, min:4, prod:false, note:'1080×1080', folder:'staff', ratioPick:true },
+  staff:       { label:'實穿照',       ratio:'s', max:0, min:4, prod:true, note:'1080×1080', folder:'staff', ratioPick:true, staffCopy:true },
   store:       { label:'門市陳列照片', ratio:'s', max:0, min:4, prod:false, note:'1080×1080', ratioPick:true },
   reels_item:  { label:'單品REELS轉PO', ratio:'s', max:0, prod:true,  note:'影片', video:true },
   reels_brand: { label:'形象影片REELS轉PO', ratio:'s', max:0, prod:false, note:'影片', video:true }
@@ -695,7 +695,7 @@ async function openSlot(date, slot){
   S.type = c.type || (((S.tpl || DEFAULT_TPL)[effectiveWeekType()] || {})[slot] || [])[(fromIso(date).getDay() + 6) % 7] || 'hero';
   $('#type').value = S.type;
   $('#at').value = date + 'T' + slot.slice(0,2) + ':' + slot.slice(2);
-  S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store;
+  S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store; $('#bodyShape').value = c.bodyShape || '';
   $('#msg').value = c.message || ''; $('#extra').value = c.extra || ''; $('#vars').innerHTML = ''; $('#pubMsg').textContent = '';
   $('#linkCustom').value = c.linkCustom || '';
   if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig, cam: im.cam || null }); }); }
@@ -747,11 +747,12 @@ function applyType(){
   $('#cardImg').classList.toggle('hide', !!t.video);
   $('#cardVideo').classList.toggle('hide', !t.video);
   $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : t.min ? '，最少 ' + t.min + ' 張' : '');
-  $('#ratioSeg').classList.toggle('hide', !t.ratioPick); $('#storeSel').classList.toggle('hide', !t.ratioPick); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || 's')); });
+  $('#ratioSeg').classList.toggle('hide', !t.ratioPick); $('#storeSel').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || 's')); });
   var tf2 = teamsFolderFor(S.type); if (tf2 && !S.opening) dbxLoad(tf2);
 }
 $('#storeSel').innerHTML = '<option value="">選門市</option>' + STORES.map(function(st, i){ return '<option value="' + i + '">' + st.name + '</option>'; }).join('');
 $('#storeSel').addEventListener('change', function(){ S.store = $('#storeSel').value; autosave(); });
+$('#bodyShape').addEventListener('input', autosave);
 function guessStore(){
   // 從第一張圖的檔名猜門市（台中陳列_、台南_乙蘭_）；台中有兩間不猜
   if ($('#storeSel').value || !S.images.length) return;
@@ -1138,8 +1139,8 @@ $('#copyBtn').addEventListener('click', async function(){
     for (var j = 0; j < S.selected.length; j++) { var p = S.selected[j]; prods.push({ title: p.title, colors: p.colors, sizes: p.sizes, material: p.material, models: p.models, description: p.description, link: await shortLink(p.url) }); }
     var model = $('#model').value ? '主要 model 是 ' + $('#model').value + '，MODEL 資訊只寫這一位' : '';
     var l3 = line3Pick(); if (l3 && l3.url) l3 = { name: l3.name, url: await shortLink(l3.url) };
-    var stB = TYPES[S.type].ratioPick ? storeBlock(STORES[Number($('#storeSel').value)]) : '';
-    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, storeInfo: stB, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
+    var stO = STORES[Number($('#storeSel').value)], stB = TYPES[S.type].ratioPick ? storeBlock(stO) : '';
+    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, storeInfo: stB, storeName: stO ? stO.name : '', bodyShape: $('#bodyShape').value, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
     $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
     $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); autosave(); }); });
     if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); autosave(); }
@@ -1203,7 +1204,7 @@ function renderPreview(){
 }
 function slotData(status){
   return {
-    type: S.type, status: status, ratioOv: S.ratioOv || '', store: S.store || '', message: $('#msg').value, extra: $('#extra').value, link: $('#linkSel').value, linkCustom: $('#linkCustom').value, shortUrl: S.shortUrl,
+    type: S.type, status: status, ratioOv: S.ratioOv || '', store: S.store || '', bodyShape: $('#bodyShape').value, message: $('#msg').value, extra: $('#extra').value, link: $('#linkSel').value, linkCustom: $('#linkCustom').value, shortUrl: S.shortUrl,
     products: S.selected.map(function(p){ return { id: p.id, title: p.title, sku: p.sku, price: p.price, priceSale: p.priceSale, url: p.url, images: p.images, detailImages: p.detailImages, colors: p.colors, sizes: p.sizes || [], material: p.material || '', models: p.models || [], description: (p.description || '').slice(0, 600) }; }),
     skus: S.selected.map(function(p){ return p.sku; }),
     images: S.images.map(function(im){ return { key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.src === 'sl' ? im.orig : (im.orig ? 'dbx' : ''), lab: im.lab || null, cam: im.cam || null }; }),

@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26j";
+const VERSION = "2026-10-26k";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -403,12 +403,23 @@ hashtag：只有我說「要 hashtag」才在最後加一行：#VVDOUBLE #大尺
 新品介紹：hook 用當週主題的氣氛；第 2 行講這檔新品的共同感覺；詳述改成材質／版型／怎麼搭各一行。
 主打商品：第 1 行就要讓人想看這件；第 2 行設計重點；詳述照固定三句。
 行銷大活動：有趣味的口吻；第 1 行用【　】框活動名 第 2 行講活動最大的好處或期間；詳述換成活動機制 2～3 行，每行一個重點。
-實穿／門市／影片：像在聊天，一句畫面感開場、一句真實感受；中段 2～3 行講怎麼搭、穿起來的感覺。有給「門市資訊」時，商品資訊那段改放門市資訊（兩行，一字不改，ꔛ 符號保留）；有商品資料才另外加商品全名與單品連結。`;
+門市陳列／影片：像在聊天，一句畫面感開場、一句真實感受；中段 2～3 行講怎麼搭、穿起來的感覺。有給「門市資訊」時，商品資訊那段改放門市資訊（兩行，一字不改，ꔛ 符號保留）；有商品資料才另外加商品全名與單品連結。
+門市店員實穿（貼文類型是「店員實穿」時用這個固定結構，取代上面的通用結構）：
+第 1 行：#門市店員實穿 ♡ {門市名}
+第 2～4 行：各以 ⛧ 開頭，每行一句來門市試穿的好處，用問句或對話感（例：版型適不適合？穿上鏡子一照就知道！／不用盲買 面料親膚度 彈性現場親手感受／不知道怎麼搭配？來門市讓我們幫妳量身打造OOTD！），要換句不要照抄範例
+一行「-」
+♡ STAFF's PICK
+每款商品兩行：商品全名（含色名 原樣不改）換行 單品網址；多款就接著列
+一行「-」
+♡ STAFF Body Shape - {STAFF Body Shape}（沒給就省略這行）
+最後接門市資訊兩行（有給才放）
+這個結構裡不要 hook、不要前綴連結行、不要 hashtag（第 1 行的 #門市店員實穿 是固定的，不算）。`;
 
 function orientName(type) {
   if (/^new_|^new$|restock/.test(type)) return "新品介紹";
   if (/promo|weekly|link/.test(type)) return "行銷大活動";
-  if (/staff|store|reels|outfit/.test(type)) return "實穿／門市／影片";
+  if (/staff/.test(type)) return "店員實穿（用「門市店員實穿」固定結構）";
+  if (/store|reels|outfit/.test(type)) return "門市陳列／影片";
   return "主打商品";
 }
 function copySystem(cfg, type) {
@@ -715,7 +726,7 @@ exports.fbpost = onRequest(
 
         // ----- 文案 -----
         case "copy": {
-          const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false, storeInfo = "" } = body;
+          const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false, storeInfo = "", storeName = "", bodyShape = "" } = body;
           const num = (v) => String(v || "").replace(/[^\d.]/g, "");
           const desc = products.map((p) => {
             const ms = (p.models || []).map((x) => `model ${x.name} ${num(x.height)}/${num(x.weight)} 穿 ${x.size}`).join("；");
@@ -723,7 +734,7 @@ exports.fbpost = onRequest(
           }).join("\n\n");
           const cats = catLinks.map((c) => `${c.name}→ ${c.url}`).join("\n");
           const l3 = line3 && line3.url ? `第 3 行連結：${line3.name}→ ${line3.url}` : `第 3 行連結：從分類連結挑一個\n分類連結：\n${cats || "（無）"}`;
-          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${prefix || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n${storeInfo ? "門市資訊（原樣照抄，放在商品資訊那段的位置）：\n" + storeInfo + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
+          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${prefix || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n${storeInfo ? "門市資訊（原樣照抄）：\n" + storeInfo + "\n" : ""}${storeName ? "門市名：" + storeName + "\n" : ""}${bodyShape ? "STAFF Body Shape：" + bodyShape + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
           const text = await claude(cfg, copySystem(cfg, type), user);
           const variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
           return res.json({ variants });
