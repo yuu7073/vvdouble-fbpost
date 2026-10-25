@@ -408,6 +408,7 @@
       <div><canvas id="labCv"></canvas></div>
       <div>
         <div class="f"><label>版型</label><div class="tpls" id="labTpls"></div></div>
+        <div id="labAi" class="muted" style="font-size:12px;min-height:16px;margin-bottom:4px"></div>
         <div id="labLayers"></div>
         <div class="f"><label>字色</label><div class="row"><div class="seg" id="labInk"><button data-v="#FFFFFF" class="on">白</button><button data-v="#1d2433">深</button></div><input type="color" id="labInkPick" value="#ffffff"></div></div>
         <div class="f"><label>字級 <span id="labScaleV"></span></label><input type="range" id="labScale" min="60" max="150" value="100"></div>
@@ -842,17 +843,33 @@ function renderSel(){
 }
 
 /* ---------- 首圖圖文（P1 15 版型，直式 678×1028） ---------- */
-var LAB = { idx: 0, tpl: 0, layers: [], ink: '#FFFFFF', scale: 100, dy: 0 };
+var LAB = { idx: 0, tpl: 0, layers: [], ink: '#FFFFFF', scale: 100, dy: 0, req: 0 };
 var fontReady = false;
 function loadFont(){ if (fontReady) return Promise.resolve(); return Promise.all([new FontFace('YGUIB', 'url(Fonts/YuGothicUI-Bold.woff2)').load(), new FontFace('YGM', 'url(Fonts/YuGothic-Medium.woff2)').load()]).then(function(fs){ fs.forEach(function(f){ document.fonts.add(f); }); fontReady = true; }).catch(function(){ fontReady = true; }); }
 function tplById(id){ for (var i = 0; i < LAYOUTS.length; i++) if (LAYOUTS[i].id === id) return LAYOUTS[i]; return null; }
 function isTextLy(ly){ return ly.t === 'text' || ly.t === 'utext' || ly.t === 'vtext' || ly.t === 'pills' || ly.t === 'line'; }
+function labProduct(){ var p = S.selected[0] || {}; return { id: p.id, title: p.title || '', colors: p.colors || [], sizes: p.sizes || [], material: p.material || '', description: (p.description || '').slice(0, 800) }; }
+function shortTitle(t){ return String(t || '').replace(/^[《〈【][^》〉】]*[》〉】]/, '').replace(/[\s\-－–]*[^\s\-－–]*色$/, '').trim() || t || ''; }
 function fillTpl(tpl){
-  // 用商品資料帶入文字：第一個中文主標放商品名
-  var p = S.selected[0] || {}, title = (p.title || '').replace(/^[《〈][^》〉]*[》〉]/, '').trim() || p.title || '';
-  var layers = tpl.make(), did = false;
-  layers.forEach(function(ly){ if (!did && ly.t === 'text' && ly.size >= 80 && /[一-鿿]/.test(ly.text)) { ly.text = title || ly.text; did = true; } });
+  // 不用 AI 的部分先填：商品名、顏色點／色票／色帶、色數
+  var p = labProduct(), layers = tpl.make(), cols = (p.colors || []).filter(Boolean);
+  layers.forEach(function(ly){
+    if (ly.role === 'title' && p.title) ly.text = shortTitle(p.title);
+    if ((ly.t === 'dots' || ly.t === 'swatches' || ly.t === 'cband') && cols.length) ly.colors = cols.map(function(n){ return { c: colorHex(n), n: n }; });
+    if (ly.t === 'dots' && ly.layout === 'row' && cols.length) ly.tail = (CN_NUM[cols.length] || cols.length) + '色可選';
+    if (ly.role === 'colorsLine' && cols.length) ly.text = '一次收齊' + (CN_NUM[cols.length] || cols.length) + '色';
+  });
   return layers;
+}
+S.labCache = {};
+async function aiFillTpl(tpl, layers){
+  // 其餘文字欄位交給 AI；同商品同版型快取
+  var p = labProduct(), key = (p.id || p.title) + '|' + tpl.id;
+  var slots = layers.filter(function(ly){ return ly.role && ly.role !== 'colorsLine' && LAYOUT_ROLES[ly.role]; }).map(function(ly){ return { id: String(ly.id), role: ly.role, hint: LAYOUT_ROLES[ly.role], max: LAYOUT_MAX[ly.role] || 12 }; });
+  if (!slots.length) return;
+  var texts = S.labCache[key];
+  if (!texts) { var r = await api('labelCopy', { product: p, slots: slots, tplName: tpl.name }); texts = r.texts || {}; S.labCache[key] = texts; }
+  layers.forEach(function(ly){ var v = texts[String(ly.id)]; if (v && ly.role) ly.text = String(v).trim(); });
 }
 function applyGlobals(layers, lab){
   return layers.map(function(ly){ var o = Object.assign({}, ly); if (isTextLy(o)) { if (lab.tpl !== 9) o.color = lab.ink; o.size = o.size * lab.scale / 100; } if (o.t !== 'band' && o.t !== 'cband') o.y = o.y + lab.dy / 100; return o; });
@@ -875,7 +892,13 @@ function renderTplThumbs(im){
     var w = 170, h = Math.round(w * img.height / img.width);
     $$('#labTpls div').forEach(function(d){ var cv = d.querySelector('canvas'); cv.width = w; cv.height = h; var ctx = cv.getContext('2d'); ctx.drawImage(img, 0, 0, w, h); var id = Number(d.dataset.t); if (id) { var t = tplById(id); applyGlobals(fillTpl(t), { tpl: id, ink: LAB.ink, scale: 100, dy: 0 }).forEach(function(ly){ try { drawLayoutLayer(ctx, ly, w, h); } catch (e) {} }); } });
   }; img.src = im.base;
-  $$('#labTpls div').forEach(function(d){ d.addEventListener('click', function(){ var id = Number(d.dataset.t); LAB.tpl = id; LAB.layers = id ? fillTpl(tplById(id)) : []; $$('#labTpls div').forEach(function(x){ x.classList.toggle('on', x === d); }); renderLayerInputs(); drawLab(); }); });
+  $$('#labTpls div').forEach(function(d){ d.addEventListener('click', function(){ var id = Number(d.dataset.t); $$('#labTpls div').forEach(function(x){ x.classList.toggle('on', x === d); }); setLabTpl(id); }); });
+}
+async function setLabTpl(id){
+  LAB.tpl = id; LAB.layers = id ? fillTpl(tplById(id)) : []; renderLayerInputs(); drawLab();
+  if (!id) return; var tpl = tplById(id), my = ++LAB.req; $('#labAi').textContent = 'AI 填字中…';
+  try { var layers = LAB.layers; await aiFillTpl(tpl, layers); if (my !== LAB.req) return; renderLayerInputs(); drawLab(); $('#labAi').textContent = ''; }
+  catch (e) { if (my === LAB.req) $('#labAi').textContent = e.message; }
 }
 function renderLayerInputs(){
   var box = $('#labLayers'); box.innerHTML = LAB.layers.map(function(ly, i){
@@ -903,10 +926,11 @@ async function openLab(i){
   var im = S.images[i]; if (!im || !im.base) return;
   LAB.idx = i;
   if (im.lab && im.lab.layers) { LAB.tpl = im.lab.tpl; LAB.layers = JSON.parse(JSON.stringify(im.lab.layers)); LAB.ink = im.lab.ink; LAB.scale = im.lab.scale; LAB.dy = im.lab.dy || 0; }
-  else { LAB.tpl = 1; LAB.layers = fillTpl(tplById(1)); LAB.ink = '#FFFFFF'; LAB.scale = 100; LAB.dy = 0; }
+  else { LAB.tpl = 0; LAB.layers = []; LAB.ink = '#FFFFFF'; LAB.scale = 100; LAB.dy = 0; }
   $('#labScale').value = LAB.scale; $('#labScaleV').textContent = LAB.scale + '%'; $('#labDy').value = LAB.dy; $('#labDyV').textContent = LAB.dy; $('#labInkPick').value = LAB.ink.toLowerCase();
   $$('#labInk button').forEach(function(x){ x.classList.toggle('on', x.dataset.v.toLowerCase() === LAB.ink.toLowerCase()); });
   $('#labModal').classList.add('on'); await loadFont(); renderTplThumbs(im); renderLayerInputs(); drawLab();
+  if (!im.lab || !im.lab.layers) { LAB.req++; setLabTpl(1); $$('#labTpls div').forEach(function(x){ x.classList.toggle('on', x.dataset.t === '1'); }); }
 }
 function drawLabel(im, silent){
   var cv = document.createElement('canvas');

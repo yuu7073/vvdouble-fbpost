@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25t";
+const VERSION = "2026-10-25u";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -590,6 +590,20 @@ exports.fbpost = onRequest(
           const text = await claude(cfg, copySystem(cfg, type), user);
           const variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
           return res.json({ variants });
+        }
+
+        case "labelCopy": {
+          // 首圖圖文：依版型各欄位角色，用商品資料填短句（JSON）
+          const { product = {}, slots = [], tplName = "" } = body;
+          if (!slots.length) return res.json({ texts: {} });
+          const p = product;
+          const info = `【${p.title || ""}】${p.colors && p.colors.length ? "顏色：" + p.colors.join("/") : ""}${p.sizes && p.sizes.length ? "　尺寸：" + p.sizes.join(" / ") : ""}${p.material ? "　材質：" + p.material : ""}\n${(p.description || "").slice(0, 800)}`;
+          const list = slots.map((s) => `- ${s.id}（${s.role}）：${s.hint}；最多 ${s.max} 字`).join("\n");
+          const system = (cfg.brandRules || BRAND_RULES) + `\n\n【任務】這是放在商品首圖上的短文字（圖文版型「${tplName}」），不是貼文內文。\n每個欄位只寫一句、不加句尾標點、不用 emoji、不寫價格、不寫顯瘦遮肉類字眼、字數嚴格遵守上限。\n只輸出 JSON 物件，key 是欄位 id，value 是文字，不要任何其他文字或程式碼框。`;
+          const text = await claude(cfg, system, `商品資料：\n${info}\n\n要填的欄位：\n${list}`);
+          let texts = {};
+          try { texts = JSON.parse(text.replace(/^[^{]*/, "").replace(/[^}]*$/, "")); } catch (e) { return res.status(500).json({ error: "AI 回傳格式錯誤", raw: text.slice(0, 200) }); }
+          return res.json({ texts });
         }
 
         // ----- 週曆 -----
