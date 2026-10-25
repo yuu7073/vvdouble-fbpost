@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26p";
+const VERSION = "2026-10-26q";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -727,7 +727,7 @@ exports.fbpost = onRequest(
         case "resolvePicks": {
           // STAFF's PICK：每行一個網址或品名 → 商品全名（含色名）＋單品短網址
           if (!cfg.shoplineToken) return res.status(400).json({ error: "尚未設定 Shopline Token" });
-          const fields = "&fields[]=items.id&fields[]=items.title_translations&fields[]=items.variations&fields[]=items.status&fields[]=items.variations.fields_translations&fields[]=items.variations.fields";
+          const fields = "&fields[]=items.id&fields[]=items.title_translations&fields[]=items.variations&fields[]=items.status";
           const lines = String(body.text || "").split(/\n|,|，/).map((x) => x.trim()).filter(Boolean).slice(0, 20);
           const out = [];
           for (const line of lines) {
