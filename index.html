@@ -414,12 +414,12 @@ var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAl
 /* ---------- 貼文類型（圖片規格照週模板表） ---------- */
 var TYPES = {
   new_preview: { label:'新品預告貼文', ratio:'s', max:1,  prod:false, note:'banner 1080×1080' },
-  new_dm:      { label:'新品上架DM貼文', ratio:'h', max:30, prod:true,  note:'banner 1200×800 ＋ 新品照', firstOnly:true },
-  promo_dm:    { label:'活動DM貼文',   ratio:'h', max:30, prod:true,  note:'當週活動 banner 1200×800 ＋ 新品照', firstOnly:true },
+  new_dm:      { label:'新品上架DM貼文', ratio:'h', max:0, min:4, prod:true,  note:'banner 1200×800 ＋ 新品照', firstOnly:true },
+  promo_dm:    { label:'活動DM貼文',   ratio:'h', max:0, min:4, prod:true,  note:'當週活動 banner 1200×800 ＋ 新品照', firstOnly:true },
   weekly:      { label:'當周活動',     ratio:'s', max:1,  prod:false, note:'1:1', act:true },
-  hero:        { label:'主推商品',     ratio:'v', max:5,  prod:true,  note:'直式首圖 ＋ 細節圖 ×4', firstOnly:true, label_editor:true },
-  staff:       { label:'實穿照',       ratio:'s', max:4,  prod:false, note:'1080×1080 ×4', folder:'staff' },
-  store:       { label:'門市陳列照片', ratio:'s', max:4,  prod:false, note:'1080×1080 ×4' },
+  hero:        { label:'主推商品',     ratio:'v', max:0, min:4, prod:true,  note:'直式首圖 ＋ 細節圖', firstOnly:true, label_editor:true },
+  staff:       { label:'實穿照',       ratio:'s', max:0, min:4, prod:false, note:'1080×1080', folder:'staff' },
+  store:       { label:'門市陳列照片', ratio:'s', max:0, min:4, prod:false, note:'1080×1080' },
   reels_item:  { label:'單品REELS轉PO', ratio:'s', max:0, prod:true,  note:'影片', video:true },
   reels_brand: { label:'形象影片REELS轉PO', ratio:'s', max:0, prod:false, note:'影片', video:true }
 };
@@ -687,7 +687,7 @@ function applyType(){
   $('#cardProd').classList.toggle('hide', !t.prod);
   $('#cardImg').classList.toggle('hide', !!t.video);
   $('#cardVideo').classList.toggle('hide', !t.video);
-  $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : '');
+  $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : t.min ? '，最少 ' + t.min + ' 張' : '');
 }
 $$('#slots button').forEach(function(b){ b.addEventListener('click', function(){
   var base = $('#at').value ? new Date($('#at').value) : new Date();
@@ -787,7 +787,7 @@ function renderSlFiles(){
 async function pickImg(key, name, thumb, src){
   var i = S.images.findIndex(function(im){ return im.key === key; });
   if (i >= 0) { S.images.splice(i, 1); renderSel(); markPicked(); return; }
-  var max = TYPES[S.type].max || 10; if (S.images.length >= max) { say($('#pubMsg'), '這類型最多 ' + max + ' 張', 'err'); return; }
+  var max = TYPES[S.type].max || 0; if (max && S.images.length >= max) { say($('#pubMsg'), '這類型最多 ' + max + ' 張', 'err'); return; }
   var im = { key: key, name: name, src: src, thumb: thumb, loading: true };
   S.images.push(im); renderSel(); markPicked();
   try {
@@ -1006,6 +1006,7 @@ $('#pub').addEventListener('click', async function(){
   var ims = S.images.filter(function(i){ return i.b64; });
   if (S.images.some(function(i){ return i.loading; })) { say(m, '圖片還在處理', 'err'); return; }
   if (!$('#msg').value.trim() && !ims.length) { say(m, '沒有內容', 'err'); return; }
+  var mn = TYPES[S.type].min || 0; if (mn && ims.length < mn) { say(m, '這類型最少 ' + mn + ' 張圖，目前 ' + ims.length + ' 張', 'err'); return; }
   var ts = publishTs(), later = ts > Date.now() + 10 * 60000;
   if (!confirm((later ? '排程 ' + fmt(ts) : '立即') + ' 發布到粉專？')) return;
   $('#pub').disabled = true; say(m, '上傳中…');

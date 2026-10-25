@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-25r";
+const VERSION = "2026-10-25s";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -652,7 +652,7 @@ exports.fbpost = onRequest(
             const j = await fbPost(token, `/${page}/photos`, { message, ...schedule }, { buf: Buffer.from(img.b64, "base64"), mime: img.mime, name: img.name });
             postId = j.post_id || j.id; photoIds = [j.id];
           } else if (images.length > 1) {
-            for (const img of images.slice(0, 10)) {
+            for (const img of images) {
               const j = await fbPost(token, `/${page}/photos`, { published: "false", temporary: "true" }, { buf: Buffer.from(img.b64, "base64"), mime: img.mime, name: img.name });
               photoIds.push(j.id);
             }
