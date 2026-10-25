@@ -829,18 +829,30 @@ function renderChips(){ if (!S.opening) autosave();
 /* ---------- 圖片 ---------- */
 (function(){ try { var h = localStorage.getItem('fbpost_filesH'); if (h) $('#files').style.height = h + 'px'; } catch (e) {} new ResizeObserver(function(){ try { localStorage.setItem('fbpost_filesH', Math.round($('#files').getBoundingClientRect().height)); } catch (e) {} }).observe($('#files')); })();
 $('#noCrop').addEventListener('change', function(){ S.noCrop = $('#noCrop').checked; applyType(); reprocessAll(); });
+function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('逾時')); }, ms); })]); }
+function shrinkFile(f, max){
+  return new Promise(function(res, rej){
+    var url = URL.createObjectURL(f), img = new Image();
+    img.onload = function(){ try { var k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', 0.9)); } catch (e) { rej(e); } };
+    img.onerror = function(){ URL.revokeObjectURL(url); rej(new Error('無法讀取（HEIC 請先轉 JPG）')); };
+    img.src = url;
+  });
+}
 $('#upBtn').addEventListener('click', function(){ $('#upFile').click(); });
 $('#upFile').addEventListener('change', async function(){
   var files = Array.from($('#upFile').files || []); $('#upFile').value = '';
+  var fails = [];
   for (var i = 0; i < files.length; i++) {
     var f = files[i]; $('#upBtn').textContent = '上傳 ' + (i + 1) + '/' + files.length; $('#upBtn').disabled = true;
     try {
-      var b64 = await new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(fr.result.split(',')[1]); }; fr.onerror = rej; fr.readAsDataURL(f); });
-      var r = await api('uploadImage', { name: f.name, b64: b64, ym: (($('#at').value || '').slice(0, 7)) || iso(new Date()).slice(0, 7) });
-      await pickImg(r.path, r.name, 'data:' + (f.type || 'image/jpeg') + ';base64,' + b64, 'dbx');
-    } catch (e) { say($('#pubMsg'), '上傳失敗：' + e.message, 'err'); }
+      // 先在瀏覽器縮到最長邊 2048、轉 JPEG，避免手機原圖太大傳不動
+      var dataUrl = await shrinkFile(f, 2048);
+      var r = await withTimeout(api('uploadImage', { name: f.name.replace(/\.[^.]+$/, '') + '.jpg', b64: dataUrl.split(',')[1], ym: (($('#at').value || '').slice(0, 7)) || iso(new Date()).slice(0, 7) }), 60000);
+      await pickImg(r.path, r.name, dataUrl, 'dbx');
+    } catch (e) { fails.push(f.name + '：' + e.message); }
   }
   $('#upBtn').textContent = '上傳'; $('#upBtn').disabled = false;
+  if (fails.length) say($('#pubMsg'), '上傳失敗 ' + fails.length + ' 張：' + fails.join('；').slice(0, 300), 'err');
 });
 $$('#imgSrc button').forEach(function(b){ b.addEventListener('click', function(){
   $$('#imgSrc button').forEach(function(x){ x.classList.toggle('on', x === b); }); S.imgSrc = b.dataset.v;
