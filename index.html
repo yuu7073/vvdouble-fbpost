@@ -94,6 +94,7 @@
   .sel .it b{position:absolute;top:-6px;right:-6px;background:#fff;border:1px solid var(--line);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px}
   .sel .it small{display:block;font-size:10px;color:var(--mute);text-align:center}
   .sel .it button{width:100%;margin-top:3px}
+  .chip .dc{background:#fde68a;color:#7c4a00;border-radius:4px;padding:0 5px;font-style:normal;font-size:11px}
   .sel .it .mv{display:flex;gap:2px;margin-top:3px}.sel .it .mv button{margin:0;padding:3px 0;font-size:12px}
   .sel .it.drag{opacity:.4}.sel .it.over img{outline:2px solid var(--p,#2563eb)}
   textarea#msg{width:100%;min-height:220px;resize:vertical;line-height:1.6}
@@ -251,6 +252,9 @@
   <div class="card">
     <h2><span class="n">4</span>文案</h2>
     <div class="acts" id="acts"></div>
+    <div class="row" style="margin:8px 0">
+      <label class="muted" style="font-size:12px">第 3 行</label><select id="line3" style="max-width:260px"></select><select id="pfx"><option value="𖤘𖤘">𖤘𖤘</option><option value="最後限貨">最後限貨</option><option value="馬上來看">馬上來看</option><option value="">無前綴</option></select><label style="font-size:13px"><input type="checkbox" id="hashOn"> hashtag</label>
+    </div>
     <div class="row" style="margin:8px 0">
       <input type="text" id="extra" placeholder="這次要強調的點（選填）">
       <select id="model"><option value="">主要 model（全部）</option></select>
@@ -686,8 +690,9 @@ async function openSlot(date, slot){
   renderActs(); renderSel(); renderLink(); renderPreview();
   $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; renderCal(); $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' }); S.opening = false;
   if (c.images && c.images.length) { await reloadImages(); }
-  if (TYPES[S.type].folder === 'staff' && S.cfg.dropboxStaff) dbxLoad(S.cfg.dropboxStaff); else if (S.cfg.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
+  var tf = teamsFolderFor(S.type); if (tf) dbxLoad(tf); else if (S.cfg.dropbox && !S.dbxFolders.length) dbxLoad(S.dbxPath);
 }
+function teamsFolderFor(type){ if (!S.cfg.teamsRoot) return type === 'staff' ? (S.cfg.dropboxStaff || '') : ''; var ym = (($('#at').value || '').slice(0, 7)) || iso(new Date()).slice(0, 7); if (type === 'staff') return S.cfg.teamsRoot + '/實穿/' + ym; if (type === 'store') return S.cfg.teamsRoot + '/陳列/' + ym; return ''; }
 async function dbxRelocate(im){
   // 路徑失效（資料夾改名）：用貨號找回資料夾，再用檔名對回去
   var p = S.selected[0]; if (!p) return null;
@@ -729,6 +734,7 @@ function applyType(){
   $('#cardImg').classList.toggle('hide', !!t.video);
   $('#cardVideo').classList.toggle('hide', !t.video);
   $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : t.min ? '，最少 ' + t.min + ' 張' : '');
+  var tf2 = teamsFolderFor(S.type); if (tf2 && !S.opening) dbxLoad(tf2);
 }
 $$('#slots button').forEach(function(b){ b.addEventListener('click', function(){
   var base = $('#at').value ? new Date($('#at').value) : new Date();
@@ -773,9 +779,11 @@ function renderModels(){
   sel.innerHTML = '<option value="">主要 model（全部）</option>' + names.map(function(n){ return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
   if (names.indexOf(cur) >= 0) sel.value = cur;
 }
+function discountOf(p){ var a = Number(String(p.price || '').replace(/[^\d.]/g, '')), b = Number(String(p.priceSale || '').replace(/[^\d.]/g, '')); if (!a || !b || b >= a) return ''; var r = Math.round(b / a * 100); return (r % 10 === 0 ? r / 10 : r) + '折'; }
 function renderChips(){ if (!S.opening) autosave();
   renderModels();
-  $('#chips').innerHTML = S.selected.map(function(p){ return '<span class="chip"><i data-f="' + esc(p.title) + '" style="cursor:pointer;font-style:normal" title="開啟 Dropbox 資料夾">📁</i> ' + esc(p.sku || p.title) + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
+  $('#chips').innerHTML = S.selected.map(function(p){ var dc = discountOf(p); return '<span class="chip"><i data-f="' + esc(p.title) + '" style="cursor:pointer;font-style:normal" title="開啟 Dropbox 資料夾">📁</i> ' + esc(p.sku || p.title) + (dc ? ' <em class="dc">' + dc + '</em>' : '') + ' <b data-id="' + esc(p.id) + '">✕</b></span>'; }).join('');
+  renderLine3();
   $$('#chips b').forEach(function(b){ b.addEventListener('click', function(){ toggleProd({ id: b.dataset.id }); }); });
   $$('#chips i').forEach(function(b){ b.addEventListener('click', function(){ var p = S.selected.filter(function(x){ return x.title === b.dataset.f; })[0]; dbxFind(b.dataset.f, p && p.sku); }); });
 }
@@ -1055,6 +1063,7 @@ function renderActs(){
   var acts = curActs();
   $('#acts').innerHTML = acts.length ? '<div class="muted" style="margin-bottom:2px">本週活動</div>' + acts.map(function(a, i){ return '<label><input type="checkbox" data-i="' + i + '"' + (TYPES[S.type].act ? ' checked' : '') + '> <span>' + esc(a.name) + (a.url ? '' : ' <span class="red">缺網址</span>') + '</span></label>'; }).join('') + '<button class="sm" id="insActs">帶入文案</button>' : '';
   var b = $('#insActs'); if (b) b.addEventListener('click', insertActs);
+  renderLine3();
 }
 async function insertActs(){
   var acts = curActs(), picked = $$('#acts input:checked').map(function(c){ return acts[Number(c.dataset.i)]; }).filter(Boolean);
@@ -1081,6 +1090,19 @@ async function shortLink(url){
   if (S.shortCache[full]) return S.shortCache[full];
   try { var r = await api('shorten', { url: full }); S.shortCache[full] = r.short; return r.short; } catch (e) { return full; }
 }
+function catList(){ return (S.cfg.catLinks || '').split('\n').map(function(l){ var pr = l.split('|'); return pr.length >= 2 && pr[1].trim() ? { name: pr[0].trim(), url: pr[1].trim() } : null; }).filter(Boolean); }
+function renderLine3(){
+  var sel = $('#line3'), cur = sel.value, acts = curActs(), cats = catList(), h = '';
+  acts.forEach(function(a, i){ h += '<option value="a' + i + '"' + (a.url ? '' : ' disabled') + '>活動：' + esc(a.name) + (a.url ? '' : '（缺網址）') + '</option>'; });
+  cats.forEach(function(c, i){ h += '<option value="c' + i + '">分類：' + esc(c.name) + '</option>'; });
+  sel.innerHTML = h;
+  if (cur && sel.querySelector('option[value="' + cur + '"]:not([disabled])')) { sel.value = cur; return; }
+  // 預設：商品有折扣 → 第一個有網址且名稱有「折／送／價」的活動；否則第一個分類
+  var disc = S.selected.some(function(p){ return discountOf(p); });
+  var ai = disc ? acts.findIndex(function(a){ return a.url && /折|送|價|特賣|出清/.test(a.name); }) : -1;
+  sel.value = ai >= 0 ? 'a' + ai : (cats.length ? 'c0' : (acts.findIndex(function(a){ return a.url; }) >= 0 ? 'a' + acts.findIndex(function(a){ return a.url; }) : ''));
+}
+function line3Pick(){ var v = $('#line3').value; if (!v) return null; var i = Number(v.slice(1)); return v[0] === 'a' ? (curActs()[i] ? { name: curActs()[i].name, url: curActs()[i].url } : null) : (catList()[i] || null); }
 $('#copyBtn').addEventListener('click', async function(){
   $('#vars').innerHTML = '<span class="muted">產生中…</span>';
   try {
@@ -1090,7 +1112,8 @@ $('#copyBtn').addEventListener('click', async function(){
     var prods = [];
     for (var j = 0; j < S.selected.length; j++) { var p = S.selected[j]; prods.push({ title: p.title, colors: p.colors, sizes: p.sizes, material: p.material, models: p.models, description: p.description, link: await shortLink(p.url) }); }
     var model = $('#model').value ? '主要 model 是 ' + $('#model').value + '，MODEL 資訊只寫這一位' : '';
-    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
+    var l3 = line3Pick(); if (l3 && l3.url) l3 = { name: l3.name, url: await shortLink(l3.url) };
+    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
     $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
     $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); autosave(); }); });
     if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); autosave(); }

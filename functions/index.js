@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26h";
+const VERSION = "2026-10-26i";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -381,26 +381,29 @@ const BRAND_RULES = `【品牌】VV DOUBLE 台灣大尺碼女裝。slogan「大�
 不鋪陳、不解釋、不總結、不客套、不落落長。
 禁止：破折號（— 或 ——）、「寶寶們」「姐妹們」開頭、驚嘆號連發、「點擊連結」「快來看看」「不容錯過」「無論…還是…」「不只是…更是…」這類制式句、任何讀起來像 AI 的套話。
 emoji 可以用：一行最多 1 個，整則 3～5 個，放行首或行尾，增加親切感。
-句子短，一句一行；行內用空格代替逗號，行尾幾乎不加標點。
+句子短，一句一行；行內用空格代替逗號，行尾幾乎不加標點。`;
 
-【編排邏輯：重點 → 網址 → 詳述 → 客人會想知道的 → hashtag】
-手機 3 行後會折疊成「查看更多」，前 3 行要把重點和網址放完：
-第 1 行：主旨／hook（15 字內）
-第 2 行：接續一句（15 字內）
-第 3 行：「名稱→ 網址」，從分類連結挑 1～2 個（兩個就各一行）；這裡絕對不放單品網址（跳出率高）
+// 編排邏輯（獨立於品牌鐵律，設定頁改鐵律不會蓋掉）
+const LAYOUT_RULES = `【編排邏輯：hook → 設計重點 → 連結 → 詳述 → 商品資訊 → 單品連結】
+手機 3 行後會折疊成「查看更多」，前 3 行要把重點和連結放完。固定結構如下，行數和順序不能變：
+第 1 行：hook。用問句或情境開頭 再接一句解答（例：Y字尷尬不知道怎麼穿? 穿對一件就好看🌿）
+第 2 行：設計重點＋帶來的感覺（例：假兩件裙擺設計 層次感直接給你）
+第 3 行：「{前綴} {連結名稱}→ {網址}」，連結名稱與網址用我提供的「第 3 行連結」，一字不改；前綴照我指定的用，沒指定就不加
 空一行
-詳述 3～5 行：每行 18 字內
+詳述 3 行，每行 18 字內：尺寸一句（用尺寸範圍，例「2L-5L 都有」；商品資料有寫體重範圍才可寫體重，不自己推算）、版型或設計一句、布料一句
 空一行
-客人會想知道的：商品全名（原樣不改字）／尺寸（照後台規格原樣，用「 / 」串）／ITEMS→ 單品網址／MODEL 資訊（商品資料有附才寫，每位 model 一行，格式「model VV 154/92 穿 F」；指定了主要 model 就只寫那一位；沒附就不寫）
-空一行
-hashtag 一定在最後（避免粉絲點 hashtag 不點網址）：#VVDOUBLE #大尺碼不是特例 #肉肉女孩 再加 2 個跟商品有關的
-多款商品：每款各一組「商品全名／尺寸／ITEMS→」，中間空一行。沒有商品資料就省略那段。
+商品全名（原樣不改字 含色名）
+model 行：「model {名字} {身高}/{體重} 穿 {尺寸}」一位一行（商品資料有附才寫）
+「單品連結→ {單品網址}」
+hashtag：只有我說「要 hashtag」才在最後加一行：#VVDOUBLE #大尺碼不是特例 #肉肉女孩 再加 2 個跟商品有關的；沒說就完全不要出現 #
+活動清單（✐ 開頭的行）由工具另外帶入，你不要寫。
+多款商品：每款各一組「商品全名／model／單品連結→」，中間空一行。
 
 【取向：依貼文類型】
-新品介紹：1 合乎當週主題的氣氛文案 2 當週活動一句 3 主打商品直購連結；詳述用材質／版型／怎麼搭各一行。
-主打商品：1 簡而有力形容這件（第一行就是主旨，像「小編來示範推薦清單🛒」）2 搭配的行銷活動一句 3 詳述 3～4 行 4 MODEL 資訊／穿什麼 SIZE。
-行銷大活動：有趣味的口吻、聳動的標題；第一行用【　】框活動名，第二行講活動最大的好處或期間，第三行網址；詳述換成活動機制 2～3 行，每行一個 emoji 開頭。
-實穿／門市／影片：像在聊天，一句畫面感開場、一句真實感受、第三行網址；中段 2～3 行講怎麼搭、穿起來的感覺。`;
+新品介紹：hook 用當週主題的氣氛；第 2 行講這檔新品的共同感覺；詳述改成材質／版型／怎麼搭各一行。
+主打商品：第 1 行就要讓人想看這件；第 2 行設計重點；詳述照固定三句。
+行銷大活動：有趣味的口吻；第 1 行用【　】框活動名 第 2 行講活動最大的好處或期間；詳述換成活動機制 2～3 行，每行一個重點。
+實穿／門市／影片：像在聊天，一句畫面感開場、一句真實感受；中段 2～3 行講怎麼搭、穿起來的感覺。`;
 
 function orientName(type) {
   if (/^new_|^new$|restock/.test(type)) return "新品介紹";
@@ -411,7 +414,9 @@ function orientName(type) {
 function copySystem(cfg, type) {
   return `你是 VV DOUBLE 的 Facebook 粉專小編。以下規則全部要遵守，沒有例外。
 
-${cfg.brandRules || BRAND_RULES}
+${String(cfg.brandRules || BRAND_RULES).replace(/【編排邏輯[\s\S]*$/, "").trim()}
+
+${LAYOUT_RULES}
 
 這一篇的取向：${orientName(type)}
 ${cfg.copyRules ? "額外規則：" + cfg.copyRules : ""}
@@ -455,7 +460,7 @@ exports.fbpost = onRequest(
             dropbox: !!cfg.dropboxRefresh,
             dropboxAppKey: cfg.dropboxAppKey || "",
             dropboxRoot: cfg.dropboxRoot || "",
-            ms: !!(cfg.msTenant && cfg.msClientId && cfg.msSecret), msTenant: cfg.msTenant || "", msClientId: cfg.msClientId || "", teamsTeam: cfg.teamsTeam || "", teamsChanDisplay: cfg.teamsChanDisplay || "", teamsChanStaff: cfg.teamsChanStaff || "", teamsFolder: cfg.teamsFolder || "", teamsSince: cfg.teamsSince || "", teamsLast: cfg.teamsLast || null,
+            teamsRoot: teamsRoot(cfg), ms: !!(cfg.msTenant && cfg.msClientId && cfg.msSecret), msTenant: cfg.msTenant || "", msClientId: cfg.msClientId || "", teamsTeam: cfg.teamsTeam || "", teamsChanDisplay: cfg.teamsChanDisplay || "", teamsChanStaff: cfg.teamsChanStaff || "", teamsFolder: cfg.teamsFolder || "", teamsSince: cfg.teamsSince || "", teamsLast: cfg.teamsLast || null,
             shopline: !!cfg.shoplineToken,
             claude: !!cfg.anthropicKey,
             claudeModel: cfg.claudeModel || "",
@@ -710,13 +715,15 @@ exports.fbpost = onRequest(
 
         // ----- 文案 -----
         case "copy": {
-          const { products = [], type = "new", extra = "", catLinks = [], model = "" } = body;
+          const { products = [], type = "new", extra = "", catLinks = [], model = "", line3 = null, prefix = "", hashtags = false } = body;
+          const num = (v) => String(v || "").replace(/[^\d.]/g, "");
           const desc = products.map((p) => {
-            const ms = (p.models || []).map((x) => `model ${x.name} ${x.height}/${x.weight} 穿 ${x.size}${x.feel ? "（" + x.feel + "）" : ""}`).join("；");
+            const ms = (p.models || []).map((x) => `model ${x.name} ${num(x.height)}/${num(x.weight)} 穿 ${x.size}`).join("；");
             return `【${p.title}】${p.colors && p.colors.length ? "顏色：" + p.colors.join("/") : ""}${p.sizes && p.sizes.length ? "　尺寸：" + p.sizes.join(" / ") : ""}${p.material ? "　材質：" + p.material : ""}\n商品網址：${p.link || p.url || ""}\n${ms ? "MODEL 資訊：" + ms + "\n" : ""}${(p.description || "").slice(0, 600)}`;
           }).join("\n\n");
           const cats = catLinks.map((c) => `${c.name}→ ${c.url}`).join("\n");
-          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}\n可用的分類連結（第 3 行只能從這裡挑）：\n${cats || "（無）"}\n\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫，第 3 行仍放分類連結）"}`;
+          const l3 = line3 && line3.url ? `第 3 行連結：${line3.name}→ ${line3.url}` : `第 3 行連結：從分類連結挑一個\n分類連結：\n${cats || "（無）"}`;
+          const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${prefix || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
           const text = await claude(cfg, copySystem(cfg, type), user);
           const variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
           return res.json({ variants });
