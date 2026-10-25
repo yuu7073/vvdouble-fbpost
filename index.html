@@ -122,11 +122,11 @@
   .preview .pi.n1 .pc{aspect-ratio:4/5}.preview .pi.n1.por .pc{aspect-ratio:2/3}
   .preview .pi.n2{grid-template-columns:1fr 1fr}.preview .pi.n2 .pc{aspect-ratio:4/5}.preview .pi.n2.lan{grid-template-columns:1fr}.preview .pi.n2.lan .pc{aspect-ratio:2/1}
   .preview .pi.n3.lan{grid-template-columns:1fr 1fr}.preview .pi.n3.lan .pc:first-child{grid-column:1/3;aspect-ratio:2/1}.preview .pi.n3.lan .pc{aspect-ratio:1}
-  .preview .pi.n3.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr}.preview .pi.n3.por .pc:first-child{grid-row:1/3;aspect-ratio:2/3}
+  .preview .pi.n3.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr}.preview .pi.n3.por .pc:first-child{grid-row:1/3;aspect-ratio:2/3}.preview .pi.n3.por .pc:not(:first-child){aspect-ratio:2/3}
   .preview .pi.n4.lan{grid-template-columns:1fr 1fr 1fr}.preview .pi.n4.lan .pc:first-child{grid-column:1/4;aspect-ratio:2/1}.preview .pi.n4.lan .pc{aspect-ratio:1}
-  .preview .pi.n4.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr 1fr}.preview .pi.n4.por .pc:first-child{grid-row:1/4;aspect-ratio:2/3}
+  .preview .pi.n4.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr 1fr}.preview .pi.n4.por .pc:first-child{grid-row:1/4;aspect-ratio:2/3}.preview .pi.n4.por .pc:not(:first-child){aspect-ratio:1}
   .preview .pi.n5.lan{grid-template-columns:repeat(6,1fr)}.preview .pi.n5.lan .pc:nth-child(-n+2){grid-column:span 3;aspect-ratio:1}.preview .pi.n5.lan .pc:nth-child(n+3){grid-column:span 2;aspect-ratio:1}
-  .preview .pi.n5.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr 1fr}.preview .pi.n5.por .pc:first-child{grid-row:1/4;aspect-ratio:2/3}.preview .pi.n5.por .pc:nth-child(5){display:none}
+  .preview .pi.n5.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr 1fr}.preview .pi.n5.por .pc:first-child{grid-row:1/4;aspect-ratio:2/3}.preview .pi.n5.por .pc:not(:first-child){aspect-ratio:1}.preview .pi.n5.por .pc:nth-child(5){display:none}
   .preview .pi.lan .b4{display:none}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -1015,6 +1015,7 @@ $('#pub').addEventListener('click', async function(){
   if (!$('#msg').value.trim() && !ims.length) { say(m, '沒有內容', 'err'); return; }
   var mn = TYPES[S.type].min || 0; if (mn && ims.length < mn) { say(m, '這類型最少 ' + mn + ' 張圖，目前 ' + ims.length + ' 張', 'err'); return; }
   var ts = publishTs(), later = ts > Date.now() + 10 * 60000;
+  if (later && ts > Date.now() + 29 * 86400000) { say(m, 'FB 排程最多 29 天內，請先存草稿', 'err'); return; }
   if (!confirm((later ? '排程 ' + fmt(ts) : '立即') + ' 發布到粉專？')) return;
   $('#pub').disabled = true; say(m, '上傳中…');
   try {
