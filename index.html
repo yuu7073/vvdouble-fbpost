@@ -883,7 +883,7 @@ async function reprocessAll(){ for (var i = 0; i < S.images.length; i++) { var i
 function renderSel(){ if (!S.opening) autosave();
   var t = TYPES[S.type];
   $('#sel').innerHTML = S.images.map(function(im, i){
-    return '<div class="it" draggable="true" data-i="' + i + '"><img src="' + esc(im.preview || im.thumb || '') + '"><b data-i="' + i + '">✕</b><small>' + (im.loading ? '處理中…' : im.error ? '<span class="red">' + esc(im.error) + '</span>' : (im.w + '×' + im.h)) + '</small><div class="mv"><button class="sm" data-mv="-1" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + '>◀</button><button class="sm" data-mv="1" data-i="' + i + '"' + (i === S.images.length - 1 ? ' disabled' : '') + '>▶</button></div>' + (i === 0 && t.label_editor && im.base ? '<button class="sm" data-lab="' + i + '">圖文</button>' : '') + '</div>';
+    return '<div class="it" draggable="true" data-i="' + i + '"><img src="' + esc(im.preview || im.thumb || '') + '"><b data-i="' + i + '">✕</b><small>' + (im.loading ? '處理中…' : im.error ? '<span class="red">' + esc(im.error) + '</span>' : (im.w + '×' + im.h)) + '</small><div class="mv"><button class="sm" data-mv="-1" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + '>◀</button><button class="sm" data-mv="1" data-i="' + i + '"' + (i === S.images.length - 1 ? ' disabled' : '') + '>▶</button></div>' + (i === 0 && !t.video && im.base ? '<button class="sm" data-lab="' + i + '">圖文</button>' : '') + '</div>';
   }).join('');
   $$('#sel b').forEach(function(b){ b.addEventListener('click', function(){ S.images.splice(Number(b.dataset.i), 1); reprocessAll(); markPicked(); }); });
   $$('#sel button[data-lab]').forEach(function(b){ b.addEventListener('click', function(){ openLab(Number(b.dataset.lab)); }); });
