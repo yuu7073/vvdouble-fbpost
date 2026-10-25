@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26c";
+const VERSION = "2026-10-26d";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -264,10 +264,18 @@ async function dbxUpload(cfg, path, buf) {
 }
 function extOf(mime, name) { const m = /\.(jpe?g|jfif|png|gif|webp|mp4|mov|heic)$/i.exec(name || ""); if (m) return m[0].toLowerCase().replace(".jfif", ".jpg").replace(".jpeg", ".jpg"); if (/png/.test(mime)) return ".png"; if (/gif/.test(mime)) return ".gif"; if (/webp/.test(mime)) return ".webp"; if (/mp4|video/.test(mime)) return ".mp4"; return ".jpg"; }
 // 同步一個頻道：kind = display（陳列）| staff（實穿）
+function teamsRoot(cfg) {
+  // 門市素材固定放官網部門底下（不跟商品根目錄的檔期子資料夾走）；teamsFolder 以 / 開頭則視為絕對路徑
+  const tf = cfg.teamsFolder || "門市素材";
+  if (tf.startsWith("/")) return tf;
+  const root = cfg.dropboxRoot || "";
+  const i = root.indexOf("/官網部門");
+  return (i >= 0 ? root.slice(0, i + 5) : root) + "/" + tf;
+}
 async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry, deadline) {
   const doneRef = db().ref(`/fbpost/teams/done/${kind}`);
   const doneSnap = await doneRef.get(); const done = doneSnap.exists() ? doneSnap.val() : {};
-  const root = (cfg.dropboxRoot || "") + "/" + (cfg.teamsFolder || "門市素材") + "/" + (kind === "display" ? "陳列" : "實穿");
+  const root = teamsRoot(cfg) + "/" + (kind === "display" ? "陳列" : "實穿");
   const log = [], counters = {};
   let url = `/teams/${team.id}/channels/${channel.id}/messages?$top=50`, processed = 0, uploaded = 0, stop = false, more = false;
   while (url && !stop) {
@@ -288,7 +296,7 @@ async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry, dea
       const prefix = kind === "display" ? `${store}陳列_${d.mmddyy}_` : `${store}_${user.name}_${d.mmddyy}_`;
       const ck = folder + "|" + prefix;
       if (counters[ck] === undefined) { const names = await dbxListNames(cfg, folder); counters[ck] = names.filter((n) => n.startsWith(prefix)).map((n) => Number((/_(\d+)\.[a-z0-9]+$/i.exec(n) || [])[1] || 0)).reduce((a, b) => Math.max(a, b), 0); }
-      const files = [];
+      const files = []; let failed = 0;
       // 來源：貼在訊息裡的圖（hostedContents）＋上傳檔案（SharePoint 附件，用 shares API 下載）
       const srcs = imgs.map((im) => ({ url: im.url, name: "" })).concat(atts.filter((a) => /\.(jpe?g|jfif|png|gif|webp|heic|mp4|mov)$/i.test(a.name || "")).map((a) => ({ url: `/shares/u!${Buffer.from(a.contentUrl).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-")}/driveItem/content`, name: a.name })));
       const others = (m.attachments || []).filter((a) => !(a.contentType === "reference" && /\.(jpe?g|jfif|png|gif|webp|heic|mp4|mov)$/i.test(a.name || ""))).map((a) => (a.name || "") + "[" + a.contentType + "]");
@@ -299,11 +307,11 @@ async function teamsSyncChannel(cfg, team, channel, kind, since, limit, dry, dea
           const name = prefix + counters[ck] + extOf("", im.name || "x.jpg");
           if (!dry) { await dbxEnsureFolder(cfg, folder); await dbxUpload(cfg, folder + "/" + name, buf); }
           files.push(name); uploaded++;
-        } catch (e) { log.push({ msg: m.id, error: (im.name || "圖") + "：" + e.message.slice(0, 160) }); }
+        } catch (e) { failed++; log.push({ msg: m.id, error: (im.name || "圖") + "：" + e.message.slice(0, 200) }); }
       }
       if (others.length) log.push({ msg: m.id, skipped: "略過附件：" + others.join("、").slice(0, 300) });
       log.push({ at: m.createdDateTime.slice(0, 16), who: user.name, store, loc: user.loc, files });
-      if (!dry) await doneRef.child(m.id).set({ at: m.createdDateTime, n: files.length, files });
+      if (!dry && !failed) await doneRef.child(m.id).set({ at: m.createdDateTime, n: files.length, files });
     }
     url = page["@odata.nextLink"] || "";
   }
@@ -701,7 +709,7 @@ exports.fbpost = onRequest(
 
         case "teamsCheck": {
           const r = await msFindTeamChannels(cfg);
-          const root = (cfg.dropboxRoot || "") + "/" + (cfg.teamsFolder || "門市素材");
+          const root = teamsRoot(cfg);
           let rootOk = "", sub = [];
           try { const j = await dbxRpc(cfg, "/files/list_folder", { path: root, recursive: true, limit: 500 }); sub = (j.entries || []).map((e) => e.path_display); rootOk = "存在，" + sub.length + " 個項目"; } catch (e) { rootOk = /not_found/.test(e.message) ? "不存在（會自動建立）" : e.message.slice(0, 120); }
           const dd = await db().ref("/fbpost/teams/done").get(); const dv = dd.exists() ? dd.val() : {};
