@@ -764,7 +764,8 @@ $('#picksIn').addEventListener('input', autosave); $('#picksOut').addEventListen
 $('#picksGo').addEventListener('click', async function(){
   var txt = $('#picksIn').value.trim(); if (!txt) return; $('#picksGo').disabled = true; $('#picksGo').textContent = '整理中…';
   try { var r = await api('resolvePicks', { text: txt, utm: utmQuery() }); var lines = [];
-    r.picks.forEach(function(k){ lines.push(k.ok ? k.title + ' ' + k.url : '（找不到：' + k.input + '）'); });
+    var ARROWS = ['➨', '➤', '→', '➔', '⇢', '➜', '☞', '👉', '▸', '⤷'], arw = ARROWS[Math.floor(Math.random() * ARROWS.length)];
+    r.picks.forEach(function(k){ lines.push(k.ok ? k.title + arw + ' ' + k.url : '（找不到：' + k.input + '）'); });
     $('#picksOut').value = lines.join('\n'); $('#picksOut').classList.remove('hide'); autosave();
   } catch (e) { say($('#pubMsg'), e.message, 'err'); }
   $('#picksGo').disabled = false; $('#picksGo').textContent = '整理';

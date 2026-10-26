@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26w";
+const VERSION = "2026-10-26x";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -411,7 +411,7 @@ hashtag：只有我說「要 hashtag」才在最後加一行：#VVDOUBLE #大尺
 第 3～5 行：各以 ⛧ 開頭，每行一句來門市試穿的好處，用問句或對話感（例：版型適不適合？穿上鏡子一照就知道！／不用盲買 面料親膚度 彈性現場親手感受／不知道怎麼搭配？來門市讓我們幫妳量身打造OOTD！），要換句不要照抄範例
 一行「-」
 ♡ STAFF's PICK
-每款商品一行：「{條列符號}商品名 單品網址」（商品名不含色名、不含《獨家自訂》這類前綴）；多款就接著列。有給「STAFF's PICK 清單」就照清單每行加上條列符號，不用商品資料、不改字
+每款商品一行：「{條列符號}商品名{箭頭符號} 單品網址」（商品名不含色名、不含《獨家自訂》這類前綴；箭頭符號用清單裡給的，沒有就用 ➨）；多款就接著列。有給「STAFF's PICK 清單」就照清單每行加上條列符號，不用商品資料、不改字
 一行「-」
 ♡ STAFF Body Shape - {STAFF Body Shape}（沒給就省略這行）
 接著直接放門市資訊兩行（有給才放，不空行）
