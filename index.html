@@ -706,7 +706,7 @@ async function openSlot(date, slot){
   S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store; $('#bodyShape').value = c.bodyShape || ''; $('#picksIn').value = c.picksIn || ''; $('#picksOut').value = c.picksOut || ''; $('#picksOut').classList.toggle('hide', !c.picksOut);
   $('#msg').value = c.message || ''; $('#extra').value = c.extra || ''; $('#vars').innerHTML = ''; $('#pubMsg').textContent = '';
   $('#linkCustom').value = c.linkCustom || '';
-  if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig, cam: im.cam || null }); }); }
+  if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig, cam: im.cam || null, lab: im.lab || null }); }); }
   applyType(); renderProds(); renderChips(); renderLinkOptions(); if (c.link) $('#linkSel').value = c.link;
   renderActs(); renderSel(); renderLink(); renderPreview();
   $('#editTitle').textContent = '編輯 ' + date.slice(5).replace('-','/') + ' ' + SLOT_LABEL[slot]; renderCal(); $('#editWrap').classList.remove('hide'); $('#editWrap').scrollIntoView({ behavior: 'smooth', block: 'start' }); S.opening = false;
@@ -1162,11 +1162,22 @@ async function shortLink(url){
   if (S.shortCache[full]) return S.shortCache[full];
   try { var r = await api('shorten', { url: full }); S.shortCache[full] = r.short; return r.short; } catch (e) { return full; }
 }
-function catList(){ return (S.cfg.catLinks || '').split('\n').map(function(l){ var pr = l.split('|'); return pr.length >= 2 && pr[1].trim() ? { name: pr[0].trim(), url: pr[1].trim() } : null; }).filter(Boolean); }
+var STD_CATS = [
+  { name: 'NEW', url: 'https://www.vvdouble.com/categories/newin' },
+  { name: '官網首頁', url: 'https://www.vvdouble.com/' },
+  { name: '上衣類', url: 'https://www.vvdouble.com/categories/view-all-tops' },
+  { name: '下身類', url: 'https://www.vvdouble.com/categories/view-all-bottom' },
+  { name: '外套', url: 'https://www.vvdouble.com/categories/outer' }
+];
+function catList(){
+  var custom = (S.cfg.catLinks || '').split('\n').map(function(l){ var pr = l.split('|'); return pr.length >= 2 && pr[1].trim() ? { name: pr[0].trim(), url: pr[1].trim() } : null; }).filter(Boolean);
+  var norm = function(u){ return String(u).replace(/\/+$/, '').toLowerCase(); };
+  return STD_CATS.concat(custom.filter(function(c){ return !STD_CATS.some(function(x){ return norm(x.url) === norm(c.url); }); }));
+}
 function renderLine3(){
   var sel = $('#line3'), cur = sel.value, acts = curActs(), cats = catList(), h = '';
+  cats.forEach(function(c, i){ h += '<option value="c' + i + '">' + esc(c.name) + '</option>'; });
   acts.forEach(function(a, i){ h += '<option value="a' + i + '"' + (a.url ? '' : ' disabled') + '>活動：' + esc(a.name) + (a.url ? '' : '（缺網址）') + '</option>'; });
-  cats.forEach(function(c, i){ h += '<option value="c' + i + '">分類：' + esc(c.name) + '</option>'; });
   sel.innerHTML = h;
   if (cur && sel.querySelector('option[value="' + cur + '"]:not([disabled])')) { sel.value = cur; return; }
   // 預設：商品有折扣 → 第一個有網址且名稱有「折／送／價」的活動；否則第一個分類
