@@ -468,8 +468,8 @@ var TYPES = {
   promo_dm:    { label:'活動DM貼文',   ratio:'h', max:0, min:4, prod:true,  note:'當週活動 banner 1200×800 ＋ 新品照', firstOnly:true },
   weekly:      { label:'當周活動',     ratio:'s', max:1,  prod:false, note:'1:1', act:true },
   hero:        { label:'主推商品',     ratio:'v', max:4, min:4, prod:true,  note:'直式首圖 ＋ 3 張（固定 4 張）', firstOnly:true, label_editor:true },
-  staff:       { label:'實穿照',       ratio:'s', max:0, min:4, prod:true, note:'1080×1080', folder:'staff', ratioPick:true, staffCopy:true },
-  store:       { label:'門市陳列照片', ratio:'s', max:0, min:4, prod:false, note:'1080×1080', ratioPick:true },
+  staff:       { label:'實穿照',       ratio:'s', max:0, min:4, prod:true, note:'1080×1080', folder:'staff', ratioPick:true, staffCopy:true, picksBox:true },
+  store:       { label:'門市陳列照片', ratio:'s', max:0, min:4, prod:true, note:'1080×1080', ratioPick:true, picksBox:true },
   reels_item:  { label:'單品REELS轉PO', ratio:'s', max:0, prod:true,  note:'影片', video:true },
   reels_brand: { label:'形象影片REELS轉PO', ratio:'s', max:0, prod:false, note:'影片', video:true }
 };
@@ -754,7 +754,7 @@ function applyType(){
   $('#cardImg').classList.toggle('hide', !!t.video);
   $('#cardVideo').classList.toggle('hide', !t.video);
   $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : t.min ? '，最少 ' + t.min + ' 張' : '');
-  $('#ratioSeg').classList.toggle('hide', !!t.video); $('#staffBox').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $('#picksIn').parentNode.classList.toggle('hide', !t.staffCopy); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || t.ratio || 'h')); });
+  $('#ratioSeg').classList.toggle('hide', !!t.video); $('#staffBox').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $('#picksIn').parentNode.classList.toggle('hide', !t.picksBox); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || t.ratio || 'h')); });
   var tf2 = teamsFolderFor(S.type); if (tf2 && !S.opening) dbxLoad(tf2);
 }
 $('#storeSel').innerHTML = '<option value="">選門市</option>' + STORES.map(function(st, i){ return '<option value="' + i + '">' + st.name + '</option>'; }).join('');
@@ -1184,7 +1184,7 @@ $('#copyBtn').addEventListener('click', async function(){
     var model = $('#model').value ? '主要 model 是 ' + $('#model').value + '，MODEL 資訊只寫這一位' : '';
     var l3 = line3Pick(); if (l3 && l3.url) l3 = { name: l3.name, url: await shortLink(l3.url) };
     var stO = STORES[Number($('#storeSel').value)], stB = TYPES[S.type].ratioPick ? storeBlock(stO) : '';
-    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, storeInfo: stB, storeName: stO ? stO.name : '', bodyShape: $('#bodyShape').value, picks: TYPES[S.type].staffCopy ? $('#picksOut').value.trim() : '', extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
+    var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, storeInfo: stB, storeName: stO ? stO.name : '', bodyShape: $('#bodyShape').value, picks: TYPES[S.type].picksBox ? $('#picksOut').value.trim() : '', extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
     $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
     $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); autosave(); }); });
     if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); autosave(); }
@@ -1203,7 +1203,7 @@ $('#editBtn').addEventListener('click', async function(){
     for (var j = 0; j < S.selected.length; j++) { var p = S.selected[j]; prods.push({ title: p.title, link: await shortLink(p.url), models: p.models, sizes: p.sizes, material: p.material, description: (p.description || '').slice(0, 400) }); }
     var cats = catList(); for (var k = 0; k < cats.length; k++) cats[k] = { name: cats[k].name, url: await shortLink(cats[k].url) };
     var stO = STORES[Number($('#storeSel').value)];
-    var r = await api('copyEdit', { text: txt, type: S.type, activities: acts, products: prods, catLinks: cats, storeInfo: TYPES[S.type].ratioPick ? storeBlock(stO) : '', picks: TYPES[S.type].staffCopy ? $('#picksOut').value.trim() : '' });
+    var r = await api('copyEdit', { text: txt, type: S.type, activities: acts, products: prods, catLinks: cats, storeInfo: TYPES[S.type].ratioPick ? storeBlock(stO) : '', picks: TYPES[S.type].picksBox ? $('#picksOut').value.trim() : '' });
     if (r.text) { $('#msg').value = r.text.trim(); renderPreview(); autosave(); }
     $('#editMsg').textContent = '';
   } catch (e) { $('#editMsg').textContent = e.message; }
