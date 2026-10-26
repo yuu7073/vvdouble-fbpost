@@ -47,7 +47,8 @@
   /* 週曆 */
   .calwrap{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:stretch}
   .calcol{display:flex;flex-direction:column;gap:16px}.tips{flex:1}
-  .tips .sum{font-weight:600;margin:8px 0 6px}.tips ol{margin:0;padding-left:20px;line-height:1.7;font-size:14px}.tips .wx{font-size:12px;color:var(--mute);margin-top:8px;white-space:pre-wrap}
+  .tips{overflow:auto;box-sizing:border-box}.tips .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.tips .chip{font-size:12px;padding:3px 9px;border-radius:999px;background:#f1f3f6;color:var(--ink)}.tips .chip.h{background:#fde7c4;color:#9a5b00}
+  .tips .sum{font-weight:600;font-size:14px;margin:6px 0 4px}.tips ul{margin:0;padding-left:18px;line-height:1.7;font-size:13px}
   @media(max-width:1000px){.calwrap{grid-template-columns:1fr}}
   .cal{display:grid;grid-template-columns:56px repeat(7,1fr);gap:6px}
   .cal .dh{text-align:center;font-size:12px;color:var(--mute);padding:4px 0}
@@ -676,6 +677,8 @@ $('#wNext').addEventListener('click', function(){ var d = fromIso(S.monday); d.s
 $('#wToday').addEventListener('click', function(){ S.monday = iso(mondayOf(new Date())); loadWeek(); });
 $('#wRefresh').addEventListener('click', loadWeek);
 $('#tipsRe').addEventListener('click', function(){ loadTips(true); });
+function fitTips(){ var c = $('#tipsCard'), side = $('.side'); if (!c || !side || window.innerWidth < 1000) { if (c) c.style.height = ''; return; } var h = side.getBoundingClientRect().bottom - c.getBoundingClientRect().top; c.style.height = Math.max(120, Math.round(h)) + 'px'; }
+window.addEventListener('resize', fitTips);
 $('#reshortBtn').addEventListener('click', async function(){ var m = $('#reshortMsg'); m.textContent = '處理中…'; try { var r = await api('reshorten', {}); var ok = r.items.filter(function(i){ return i.ok; }).length, bad = r.items.filter(function(i){ return !i.ok; }); m.textContent = '完成：換了 ' + ok + ' 篇' + (bad.length ? '，失敗 ' + bad.length + '：' + bad.map(function(b){ return b.error; }).join('；') : '') + (r.items.length ? '' : '（沒有需要換的）'); } catch (e) { m.textContent = e.message; } });
 async function loadTips(force){
   var ds = weekDates();
@@ -686,7 +689,10 @@ async function loadTips(force){
     var r = await api('weekTips', { dates: ds, acts: acts, plan: plan, force: !!force });
     $('#tipsAt').textContent = r.at ? new Date(r.at).toLocaleString('zh-TW', { hour12: false }).slice(5, -3) : '';
     $('#tips').className = '';
-    $('#tips').innerHTML = (r.summary ? '<div class="sum">' + esc(r.summary) + '</div>' : '') + '<ol>' + (r.tips || []).map(function(t){ return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>' + '<div class="wx">' + esc((r.holidays && r.holidays.length ? '假日／節慶：' + r.holidays.join('、') + '\n' : '') + (r.weather || []).join('\n')) + '</div>';
+    var wx = (r.weather || []).map(function(w){ return '<span class="chip">' + esc(w.city + ' ' + w.lo + '–' + w.hi + '°' + (w.rain ? ' ☔' + w.rain + '天' : '')) + '</span>'; }).join('');
+    var hol = (r.holidays || []).map(function(h){ return '<span class="chip h">' + esc(h) + '</span>'; }).join('');
+    $('#tips').innerHTML = '<div class="chips">' + wx + hol + '</div>' + (r.summary ? '<div class="sum">' + esc(r.summary) + '</div>' : '') + '<ul>' + (r.tips || []).map(function(t){ return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+    fitTips();
   } catch (e) { $('#tips').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
 }
 $('#weekType').addEventListener('change', async function(){ S.weekType = $('#weekType').value; try { await api('setWeekType', { monday: S.monday, weekType: S.weekType }); } catch (e) {} renderCal(); });
@@ -704,7 +710,7 @@ async function loadWeek(){
     var r = await api('week', { dates: ds });
     S.week = r.slots || {}; S.weekType = r.weekType || ''; $('#weekType').value = S.weekType;
     if (!S.acts.length) { try { var a = await api('activities'); S.acts = a.items || []; S.newDates = a.newDates || []; } catch (e) { S.actsErr = e.message; } }
-    renderCal(); loadTips(false);
+    renderCal(); loadTips(false); setTimeout(fitTips, 50);
   } catch (e) { $('#cal').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
 }
 function renderCal(){

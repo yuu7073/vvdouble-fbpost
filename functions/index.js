@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26s";
+const VERSION = "2026-10-26t";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -376,16 +376,47 @@ function weekHolidays(dates) {
 }
 async function weatherFor(dates) {
   const spots = [["台北", 25.04, 121.56], ["台中", 24.15, 120.67], ["高雄", 22.63, 120.30]];
-  const out = [];
+  const out = [], brief = [];
   for (const [n, la, lo] of spots) {
     try {
       const u = `https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&start_date=${dates[0]}&end_date=${dates[dates.length - 1]}`;
       const r = await fetch(u); const j = await r.json();
       const d = j.daily || {};
       out.push(n + "：" + (d.time || []).map((t, i) => `${t.slice(5)} ${Math.round(d.temperature_2m_min[i])}–${Math.round(d.temperature_2m_max[i])}°C 雨${d.precipitation_probability_max[i]}%`).join("、"));
+      const mins = d.temperature_2m_min || [], maxs = d.temperature_2m_max || [], rain = (d.precipitation_probability_max || []).filter((x) => x >= 50).length;
+      brief.push({ city: n, lo: Math.round(Math.min(...mins)), hi: Math.round(Math.max(...maxs)), rain });
     } catch (e) { out.push(n + "：天氣讀取失敗"); }
   }
-  return out;
+  return { lines: out, brief };
+}
+async function genTips(cfg, dates) {
+  const wx = await weatherFor(dates);
+  const hol = weekHolidays(dates);
+  let acts = [];
+  try { const a = await readActivities(cfg); acts = (a.items || []).filter((x) => x.start <= dates[6] && x.end >= dates[0]).map((x) => ({ name: x.name, start: x.start, end: x.end, mech: x.mech })); } catch (e) { console.warn("tips acts", e.message); }
+  const plan = [];
+  for (const d of dates) { const sl = await db().ref("/fbpost/slots/" + d).get(); if (sl.exists()) Object.entries(sl.val()).forEach(([slot, c]) => { if (c && c.type) plan.push({ date: d, slot: slot.slice(0, 2) + ":" + slot.slice(2), type: c.type, status: c.status }); }); }
+  const sys = `你是 VV DOUBLE（台灣大尺碼女裝，7 間門市＋官網）的行銷企劃。根據本週天氣、節慶、活動與貼文排程，給粉專小編最多 3 條建議。
+格式：每條 ≤ 30 字，開頭寫「MM/DD 類型」，再接一個明確動作，例：「10/28 主推｜推薄外套疊穿，切角北部連雨」。不要客套、不解釋、不重複排程已有內容。
+溫度規則：≤20°C 強推外套/針織/長袖；20–25°C 薄外套/疊穿；≥28°C 透氣涼感；雨天推門市取貨/宅配免運。
+只輸出 JSON：{"summary":"≤25 字的本週一句話重點","tips":["…","…","…"]}`;
+  const user = `本週 ${dates[0]}～${dates[6]}
+天氣：
+${wx.lines.join("\n")}
+節慶／假日：${hol.length ? hol.join("、") : "無"}
+進行中活動：${acts.length ? "\n" + acts.map((a) => `${a.name}（${a.start.slice(5)}～${a.end.slice(5)}）${a.mech || ""}`).join("\n") : "無"}
+已排貼文：${plan.length ? "\n" + plan.map((x) => `${x.date.slice(5)} ${x.slot}：${TYPE_LABEL[x.type] || x.type}`).join("\n") : "尚未排"}`;
+  const txt = await claude(cfg, sys, user);
+  let j = {}; try { j = JSON.parse((txt.match(/\{[\s\S]*\}/) || ["{}"])[0]); } catch (e) { j = { summary: "", tips: txt.split("\n").filter(Boolean) }; }
+  const outp = { summary: j.summary || "", tips: Array.isArray(j.tips) ? j.tips.slice(0, 3) : [], weather: wx.brief, holidays: hol, acts: acts.map((a) => a.name), at: Date.now() };
+  await db().ref("/fbpost/tips/" + dates[0]).set(outp);
+  return outp;
+}
+function taipeiWeek() {
+  const now = new Date(Date.now() + 8 * 3600000);
+  const dow = (now.getUTCDay() + 6) % 7; // 週一=0
+  const mon = new Date(now); mon.setUTCDate(now.getUTCDate() - dow);
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setUTCDate(mon.getUTCDate() + i); return d.toISOString().slice(0, 10); });
 }
 
 const TYPE_LABEL = { new_preview: "新品預告", new_dm: "新品上架", promo_dm: "活動DM", weekly: "當周活動", hero: "主推商品", staff: "店員實穿", store: "門市陳列", reels_item: "單品影片", reels_brand: "形象影片", new: "新品上架", restock: "補貨", promo: "活動優惠", outfit: "穿搭", link: "活動連結" };
@@ -488,7 +519,7 @@ exports.fbpost = onRequest(
       return res.json({ ok: true, first: true });
     }
     const sk = req.get("X-Sync-Key") || "";
-    const viaSync = action === "teamsSync" && cfg.syncKey && sk === cfg.syncKey;
+    const viaSync = (action === "teamsSync" || action === "weekTipsAuto") && cfg.syncKey && sk === cfg.syncKey;
     if (!viaSync && (!cfg.password || pw !== cfg.password)) return res.status(401).json({ error: cfg.password ? "密碼錯誤" : "尚未設定密碼" });
 
     try {
@@ -920,26 +951,12 @@ exports.fbpost = onRequest(
         case "weekTips": {
           const dates = (body.dates || []).slice(0, 7);
           if (dates.length !== 7) return res.status(400).json({ error: "dates" });
-          const key = "/fbpost/tips/" + dates[0];
-          if (!body.force) { const c = await db().ref(key).get(); if (c.exists()) return res.json(Object.assign({ cached: true }, c.val())); }
-          const weather = await weatherFor(dates);
-          const hol = weekHolidays(dates);
-          const acts = (body.acts || []).map((a) => `${a.name}（${a.start}～${a.end}）${a.mech || ""}`);
-          const plan = (body.plan || []).map((x) => `${x.date.slice(5)} ${x.slot}：${TYPE_LABEL[x.type] || x.type}${x.status ? "（" + x.status + "）" : ""}`);
-          const sys = `你是 VV DOUBLE（台灣大尺碼女裝，7 間門市＋官網）的行銷企劃。根據本週天氣、節慶、活動與貼文排程，給粉專小編 4～6 條「可以直接執行」的建議。
-規則：每條一句話、具體（要推什麼品類／用什麼切角／哪一天發）、不要客套、不要解釋原理、不要重複排程裡已有的內容。溫度：≤20°C 強推外套/針織/長袖，20–25°C 薄外套/疊穿，≥28°C 透氣涼感；雨天推門市取貨/宅配免運與穿搭影片。
-只輸出 JSON：{"summary":"一句話本週重點","tips":["…","…"]}`;
-          const user = `本週 ${dates[0]}～${dates[6]}
-天氣：
-${weather.join("\n")}
-節慶／假日：${hol.length ? hol.join("、") : "無"}
-進行中活動：${acts.length ? "\n" + acts.join("\n") : "無"}
-已排貼文：${plan.length ? "\n" + plan.join("\n") : "尚未排"}`;
-          const txt = await claude(cfg, sys, user);
-          let j = {}; try { j = JSON.parse((txt.match(/\{[\s\S]*\}/) || ["{}"])[0]); } catch (e) { j = { summary: "", tips: txt.split("\n").filter(Boolean) }; }
-          const outp = { summary: j.summary || "", tips: Array.isArray(j.tips) ? j.tips.slice(0, 8) : [], weather, holidays: hol, at: Date.now() };
-          await db().ref(key).set(outp);
-          return res.json(outp);
+          if (!body.force) { const c = await db().ref("/fbpost/tips/" + dates[0]).get(); if (c.exists() && c.val().weather && Array.isArray(c.val().weather) && typeof c.val().weather[0] === "object") return res.json(Object.assign({ cached: true }, c.val())); }
+          return res.json(await genTips(cfg, dates));
+        }
+        case "weekTipsAuto": {
+          // 每天早上由 GitHub 排程呼叫（X-Sync-Key）
+          return res.json(await genTips(cfg, taipeiWeek()));
         }
         case "reshorten": {
           // 把「已排程未發布」貼文裡的 bit.ly 全部換成 reurl，並更新粉專上的排程貼文
@@ -991,29 +1008,7 @@ ${weather.join("\n")}
 
         // ----- 行銷排程／活動明細 -----
         case "activities": {
-          const sheet = cfg.scheduleSheet || "1vrsXPERq4ppkHmlhdwU3IHKc6WZrgN9Kc8H97mvVQAs";
-          const year = Number(cfg.scheduleYear) || 2026;
-          const rows = await sheetsGet(sheet, "活動明細!A1:Z200");
-          const head = rows.find((r) => r.includes("活動／新品名稱")) || [];
-          const hi = rows.indexOf(head);
-          const col = (name) => head.findIndex((h) => String(h).replace(/\s/g, "").includes(name));
-          const ci = { name: col("名稱"), start: col("開始"), end: col("結束"), mech: col("優惠機制"), type: col("類型"), url: head.findIndex((h) => /網址|URL|url|連結/.test(String(h))), note: col("注意") };
-          const items = [];
-          rows.slice(hi + 1).forEach((r, i) => {
-            const name = r[ci.name]; if (!name) return;
-            const start = parseMD(r[ci.start], year); if (!start) return;
-            const end = parseMD(r[ci.end], year) || addDays(start, 30);
-            items.push({ row: hi + 2 + i, name: String(name).trim(), type: r[ci.type] || "", start, end, mech: r[ci.mech] || "", note: r[ci.note] || "", url: ((ci.url >= 0 && r[ci.url]) || r.find((v) => /^https?:\/\//.test(String(v || "").trim())) || "").toString().trim(), startRaw: r[ci.start] || "", endRaw: r[ci.end] || "" });
-          });
-          // 新品上架日期（行銷排程的「新品時程」列）
-          let newDates = [];
-          try {
-            const sch = await sheetsGet(sheet, "行銷排程!A1:ZZ6");
-            const dateRow = sch.find((r) => r[0] === "日期") || [];
-            const npRow = sch.find((r) => r[0] === "新品時程") || [];
-            npRow.forEach((v, i) => { if (/上架/.test(String(v || ""))) { const d = parseMD(dateRow[i], year); if (d) newDates.push({ date: d, label: String(v).replace(/\s+/g, " ") }); } });
-          } catch (e) { console.warn("schedule read", e.message); }
-          return res.json({ items, newDates });
+          return res.json(await readActivities(cfg));
         }
 
         case "shorten": {
