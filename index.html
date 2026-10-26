@@ -44,7 +44,9 @@
   .msg{margin-top:10px;font-size:13px}.msg.err{color:var(--warn)}.msg.ok{color:var(--ok)}
 
   /* 週曆 */
-  .calwrap{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
+  .calwrap{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:stretch}
+  .calcol{display:flex;flex-direction:column;gap:16px}.tips{flex:1}
+  .tips .sum{font-weight:600;margin:8px 0 6px}.tips ol{margin:0;padding-left:20px;line-height:1.7;font-size:14px}.tips .wx{font-size:12px;color:var(--mute);margin-top:8px;white-space:pre-wrap}
   @media(max-width:1000px){.calwrap{grid-template-columns:1fr}}
   .cal{display:grid;grid-template-columns:56px repeat(7,1fr);gap:6px}
   .cal .dh{text-align:center;font-size:12px;color:var(--mute);padding:4px 0}
@@ -188,7 +190,7 @@
     <button data-t="set">設定</button>
   </nav>
   <span class="sp"></span>
-  <input type="text" id="who" placeholder="操作者" size="8">
+  <select id="who"><option value="">操作者</option><option>V</option><option>家榛</option><option>小逸</option></select>
   <input type="password" id="pw" placeholder="密碼" size="10">
   <span id="conn" class="muted"></span>
 </header>
@@ -205,7 +207,10 @@
     <button id="wRefresh">重新整理</button>
   </div>
   <div class="calwrap">
-    <div class="cal" id="cal"></div>
+    <div class="calcol">
+      <div class="cal" id="cal"></div>
+      <div class="card tips" id="tipsCard"><div class="row"><h2 style="margin:0">本週行銷建議</h2><span class="sp"></span><span class="muted" id="tipsAt"></span><button class="sm" id="tipsRe">重新產生</button></div><div id="tips" class="muted">—</div></div>
+    </div>
     <div class="side">
       <div class="card"><h2>本週活動</h2><div id="weekActs" class="muted">—</div></div>
       <div class="card"><h2>本週素材清單</h2><ul id="assets" class="assets"></ul></div>
@@ -230,7 +235,7 @@
   <div class="card" id="cardProd">
     <h2><span class="n">2</span>商品</h2>
     <div class="row">
-      <input type="text" id="q" placeholder="商品名稱或貨號前六碼（例 26AU06）">
+      <input type="text" id="q" placeholder="商品名稱／商品網址／貨號（例：26au0402）">
       <button id="qBtn" class="p">搜尋</button>
     </div>
     <div id="prods" class="prods"></div>
@@ -289,7 +294,7 @@
     <div class="step">
       <div class="lab"><i>3</i><div>產生</div></div>
       <div class="row">
-        <input type="text" id="extra" placeholder="這次要強調的點（選填）" style="flex:1">
+        <input type="text" id="extra" placeholder="貼文重點敘述" style="flex:1">
         <select id="model"><option value="">主要 model（全部）</option></select>
         <button id="copyBtn" class="p">AI 產 3 版</button>
       </div>
@@ -299,7 +304,7 @@
       <div id="vars" class="vars"></div>
     </div>
     <div class="step">
-      <div class="lab"><i>5</i><div>最終文案<small>可直接改</small></div></div>
+      <div class="lab"><i>5</i><div>文案內容</div></div>
       <div>
         <textarea id="msg" placeholder="文案"></textarea>
         <div class="row" style="margin:6px 0"><button id="editBtn">照註記修改</button><span class="muted" style="font-size:12px">文案裡用（ ）寫指示，例：（兩行敘述）（連結）</span><span class="sp"></span><span id="editMsg" class="muted"></span></div>
@@ -667,6 +672,19 @@ $('#wPrev').addEventListener('click', function(){ var d = fromIso(S.monday); d.s
 $('#wNext').addEventListener('click', function(){ var d = fromIso(S.monday); d.setDate(d.getDate() + 7); S.monday = iso(d); loadWeek(); });
 $('#wToday').addEventListener('click', function(){ S.monday = iso(mondayOf(new Date())); loadWeek(); });
 $('#wRefresh').addEventListener('click', loadWeek);
+$('#tipsRe').addEventListener('click', function(){ loadTips(true); });
+async function loadTips(force){
+  var ds = weekDates();
+  $('#tips').innerHTML = '<span class="muted">產生中…</span>';
+  try {
+    var acts = S.acts.filter(function(a){ return a.start <= ds[6] && a.end >= ds[0]; }).map(function(a){ return { name: a.name, start: a.startRaw, end: a.endRaw, mech: a.mech }; });
+    var plan = []; ds.forEach(function(d){ SLOTS.forEach(function(sl){ var c = (S.week[d] || {})[sl]; if (c && c.type) plan.push({ date: d, slot: SLOT_LABEL[sl], type: c.type, status: c.status === 'published' ? '已發布' : c.status === 'scheduled' ? '已排程' : '草稿' }); }); });
+    var r = await api('weekTips', { dates: ds, acts: acts, plan: plan, force: !!force });
+    $('#tipsAt').textContent = r.at ? new Date(r.at).toLocaleString('zh-TW', { hour12: false }).slice(5, -3) : '';
+    $('#tips').className = '';
+    $('#tips').innerHTML = (r.summary ? '<div class="sum">' + esc(r.summary) + '</div>' : '') + '<ol>' + (r.tips || []).map(function(t){ return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>' + '<div class="wx">' + esc((r.holidays && r.holidays.length ? '假日／節慶：' + r.holidays.join('、') + '\n' : '') + (r.weather || []).join('\n')) + '</div>';
+  } catch (e) { $('#tips').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
+}
 $('#weekType').addEventListener('change', async function(){ S.weekType = $('#weekType').value; try { await api('setWeekType', { monday: S.monday, weekType: S.weekType }); } catch (e) {} renderCal(); });
 function weekDates(){ var out = []; var d = fromIso(S.monday); for (var i = 0; i < 7; i++) { out.push(iso(d)); d.setDate(d.getDate() + 1); } return out; }
 function effectiveWeekType(){
@@ -682,7 +700,7 @@ async function loadWeek(){
     var r = await api('week', { dates: ds });
     S.week = r.slots || {}; S.weekType = r.weekType || ''; $('#weekType').value = S.weekType;
     if (!S.acts.length) { try { var a = await api('activities'); S.acts = a.items || []; S.newDates = a.newDates || []; } catch (e) { S.actsErr = e.message; } }
-    renderCal();
+    renderCal(); loadTips(false);
   } catch (e) { $('#cal').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
 }
 function renderCal(){

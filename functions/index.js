@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26x";
+const VERSION = "2026-10-26y";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -356,6 +356,35 @@ async function claude(cfg, system, user) {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error("Claude " + r.status + " " + JSON.stringify(j).slice(0, 200));
   return (j.content || []).map((c) => c.text || "").join("");
+}
+
+
+// ===== 本週行銷建議（天氣 + 節慶 + 活動 + 排程） =====
+const TW_HOLIDAYS = {
+  "2026-10-25": "光復節（補假 10/26）", "2026-10-26": "光復節補假", "2026-10-31": "萬聖節", "2026-11-11": "雙11", "2026-11-12": "國父誕辰", "2026-11-26": "感恩節（美式）", "2026-11-27": "黑色星期五",
+  "2026-12-12": "雙12", "2026-12-24": "平安夜", "2026-12-25": "聖誕節（行憲紀念日放假）", "2026-12-31": "跨年",
+  "2027-01-01": "元旦", "2027-02-05": "除夕", "2027-02-06": "春節初一", "2027-02-07": "初二", "2027-02-08": "初三", "2027-02-09": "初四", "2027-02-10": "初五", "2027-02-14": "情人節", "2027-02-22": "元宵節", "2027-02-28": "和平紀念日",
+  "2027-03-08": "婦女節／38女王節", "2027-04-04": "兒童節", "2027-04-05": "清明節", "2027-05-01": "勞動節", "2027-05-09": "母親節", "2027-06-09": "端午節", "2027-08-08": "父親節", "2027-08-14": "七夕", "2027-09-15": "中秋節", "2027-10-10": "國慶日",
+};
+function weekHolidays(dates) {
+  return dates.map((d) => {
+    const dt = new Date(d + "T00:00:00+08:00"), dow = dt.getUTCDay();
+    const name = TW_HOLIDAYS[d];
+    return name ? `${d.slice(5)} ${name}` : null;
+  }).filter(Boolean);
+}
+async function weatherFor(dates) {
+  const spots = [["台北", 25.04, 121.56], ["台中", 24.15, 120.67], ["高雄", 22.63, 120.30]];
+  const out = [];
+  for (const [n, la, lo] of spots) {
+    try {
+      const u = `https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&start_date=${dates[0]}&end_date=${dates[dates.length - 1]}`;
+      const r = await fetch(u); const j = await r.json();
+      const d = j.daily || {};
+      out.push(n + "：" + (d.time || []).map((t, i) => `${t.slice(5)} ${Math.round(d.temperature_2m_min[i])}–${Math.round(d.temperature_2m_max[i])}°C 雨${d.precipitation_probability_max[i]}%`).join("、"));
+    } catch (e) { out.push(n + "：天氣讀取失敗"); }
+  }
+  return out;
 }
 
 const TYPE_LABEL = { new_preview: "新品預告", new_dm: "新品上架", promo_dm: "活動DM", weekly: "當周活動", hero: "主推商品", staff: "店員實穿", store: "門市陳列", reels_item: "單品影片", reels_brand: "形象影片", new: "新品上架", restock: "補貨", promo: "活動優惠", outfit: "穿搭", link: "活動連結" };
@@ -706,9 +735,16 @@ exports.fbpost = onRequest(
         // ----- Shopline -----
         case "shoplineSearch": {
           if (!cfg.shoplineToken) return res.status(400).json({ error: "尚未設定 Shopline Token" });
-          const q = String(body.query || "").trim();
+          let q = String(body.query || "").trim();
           const fields = "&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.medias&fields[]=items.detail_medias&fields[]=items.variations&fields[]=items.price&fields[]=items.price_sale&fields[]=items.sku&fields[]=items.description_translations";
           let items = [];
+          // 商品網址：/products/{id 或 handle}
+          if (/^https?:\/\//.test(q)) {
+            const handle = decodeURIComponent((q.split("?")[0].split("/products/")[1] || "").replace(/\/$/, ""));
+            if (/^[0-9a-f]{24}$/i.test(handle)) { const r = await slFetch(cfg.shoplineToken, `/products/${handle}?${fields.slice(1)}`); if (r.body && r.body.id) return res.json({ items: [slProduct(r.body)] }); }
+            q = handle.split("-")[0] || handle;
+            if (!q) return res.json({ items: [] });
+          }
           // 貨號前綴（例如 26AU06）：用 sku 搜尋 + 標題搜尋都試
           const r1 = await slFetch(cfg.shoplineToken, `/products/search?query=${encodeURIComponent(q)}&per_page=40${fields}`);
           items = (r1.body && r1.body.items) || [];
@@ -879,6 +915,30 @@ exports.fbpost = onRequest(
           for (const d of dates) { const s = await db().ref("/fbpost/slots/" + d).get(); out[d] = s.exists() ? s.val() : {}; }
           const wt = await db().ref("/fbpost/weekType/" + (dates[0] || "")).get();
           return res.json({ slots: out, weekType: wt.exists() ? wt.val() : "" });
+        }
+        case "weekTips": {
+          const dates = (body.dates || []).slice(0, 7);
+          if (dates.length !== 7) return res.status(400).json({ error: "dates" });
+          const key = "/fbpost/tips/" + dates[0];
+          if (!body.force) { const c = await db().ref(key).get(); if (c.exists()) return res.json(Object.assign({ cached: true }, c.val())); }
+          const weather = await weatherFor(dates);
+          const hol = weekHolidays(dates);
+          const acts = (body.acts || []).map((a) => `${a.name}（${a.start}～${a.end}）${a.mech || ""}`);
+          const plan = (body.plan || []).map((x) => `${x.date.slice(5)} ${x.slot}：${TYPE_LABEL[x.type] || x.type}${x.status ? "（" + x.status + "）" : ""}`);
+          const sys = `你是 VV DOUBLE（台灣大尺碼女裝，7 間門市＋官網）的行銷企劃。根據本週天氣、節慶、活動與貼文排程，給粉專小編 4～6 條「可以直接執行」的建議。
+規則：每條一句話、具體（要推什麼品類／用什麼切角／哪一天發）、不要客套、不要解釋原理、不要重複排程裡已有的內容。溫度：≤20°C 強推外套/針織/長袖，20–25°C 薄外套/疊穿，≥28°C 透氣涼感；雨天推門市取貨/宅配免運與穿搭影片。
+只輸出 JSON：{"summary":"一句話本週重點","tips":["…","…"]}`;
+          const user = `本週 ${dates[0]}～${dates[6]}
+天氣：
+${weather.join("\n")}
+節慶／假日：${hol.length ? hol.join("、") : "無"}
+進行中活動：${acts.length ? "\n" + acts.join("\n") : "無"}
+已排貼文：${plan.length ? "\n" + plan.join("\n") : "尚未排"}`;
+          const txt = await claude(cfg, sys, user);
+          let j = {}; try { j = JSON.parse((txt.match(/\{[\s\S]*\}/) || ["{}"])[0]); } catch (e) { j = { summary: "", tips: txt.split("\n").filter(Boolean) }; }
+          const outp = { summary: j.summary || "", tips: Array.isArray(j.tips) ? j.tips.slice(0, 8) : [], weather, holidays: hol, at: Date.now() };
+          await db().ref(key).set(outp);
+          return res.json(outp);
         }
         case "saveSlot": {
           const { date, slot, data } = body;
