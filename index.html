@@ -25,6 +25,7 @@
   .tabs{display:flex;gap:2px}
   .tabs button{border:none;background:none;padding:8px 12px;border-bottom:2px solid transparent;border-radius:0;color:var(--mute)}
   .tabs button.on{color:var(--ink);border-bottom-color:var(--acc)}
+  .tabs .ext{display:flex;gap:2px;margin-left:10px;padding-left:10px;border-left:1px solid var(--line)}.tabs .ext a{padding:8px 10px;font-size:13px;color:var(--mute);text-decoration:none}.tabs .ext a:hover{color:var(--ink)}
   main{max-width:1320px;margin:0 auto;padding:18px 20px 60px}
   .pane{display:none}.pane.on{display:block}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
@@ -188,6 +189,7 @@
     <button data-t="list">紀錄</button>
     <button data-t="stats">成效</button>
     <button data-t="set">設定</button>
+    <span class="ext"><a href="https://business.facebook.com/latest/posts/published_posts?asset_id=1211023929047667&business_id=1040698232615621" target="_blank">FB 已發佈 ↗</a><a href="https://business.facebook.com/latest/posts/scheduled_posts?asset_id=1211023929047667&business_id=1040698232615621" target="_blank">FB 已排定 ↗</a></span>
   </nav>
   <span class="sp"></span>
   <select id="who"><option value="">操作者</option><option>V</option><option>家榛</option><option>小逸</option></select>
@@ -1375,7 +1377,9 @@ $('#pub').addEventListener('click', async function(){
   var mn = TYPES[S.type].min || 0; if (mn && ims.length < mn) { say(m, '這類型最少 ' + mn + ' 張圖，目前 ' + ims.length + ' 張', 'err'); return; }
   var ts = publishTs(), later = ts > Date.now() + 10 * 60000;
   if (later && ts > Date.now() + 29 * 86400000) { say(m, 'FB 排程最多 29 天內，請先存草稿', 'err'); return; }
-  if (!confirm((later ? '排程 ' + fmt(ts) : '立即') + ' 發布到粉專？')) return;
+  var cur = (S.week[k.date] || {})[k.slot] || {};
+  var warn = cur.postId && cur.status === 'scheduled' ? '\n（這格原本的排程貼文會先從粉專刪除，再換成這篇）' : cur.postId && cur.status === 'published' ? '\n（這格已經發布過一篇，會再發一篇新的）' : '';
+  if (!confirm((later ? '排程 ' + fmt(ts) : '立即') + ' 發布到粉專？' + warn)) return;
   $('#pub').disabled = true; say(m, '上傳中…');
   try {
     await api('saveSlot', { date: k.date, slot: k.slot, data: slotData('draft') });
@@ -1384,7 +1388,7 @@ $('#pub').addEventListener('click', async function(){
       images: ims.map(function(i){ return { b64: i.b64, mime: i.mime, name: i.name }; }),
       meta: { type: S.type, skus: S.selected.map(function(p){ return p.sku; }), titles: S.selected.map(function(p){ return p.title; }), utm: currentLink() ? utmCampaign(ts) : '', by: $('#who').value, date: k.date, slot: k.slot }
     });
-    say(m, (r.scheduled ? '已排程' : '已發布') + '　貼文 ID ' + r.postId, 'ok'); loadWeek();
+    say(m, (r.scheduled ? '已排程' : '已發布') + '　貼文 ID ' + r.postId + (r.replaced ? '（舊排程已刪除）' : ''), 'ok'); loadWeek();
   } catch (e) { say(m, e.message, 'err'); }
   $('#pub').disabled = false;
 });

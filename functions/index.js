@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26y";
+const VERSION = "2026-10-26z";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -995,6 +995,17 @@ ${weather.join("\n")}
           const token = cfg.metaToken, page = cfg.pageId;
           const isScheduled = scheduledAt && scheduledAt > Date.now() + 10 * 60000;
           const schedule = isScheduled ? { published: "false", scheduled_publish_time: String(Math.floor(scheduledAt / 1000)) } : {};
+          // 同一格重新排程：先把舊的「已排程」貼文從粉專刪掉，避免同時段出現兩篇
+          let replaced = null;
+          if (meta.date && meta.slot) {
+            const old = await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).get();
+            const ov = old.exists() ? old.val() : {};
+            if (ov.postId && ov.status === "scheduled") {
+              try { await fbDelete(token, ov.postId); } catch (e) { if (!/does not exist|Unsupported/.test(e.message)) throw new Error("刪除舊排程失敗：" + e.message); }
+              if (ov.recId) await db().ref("/fbpost/posts/" + ov.recId).update({ status: "deleted", deletedAt: Date.now(), replacedBy: "reschedule" });
+              replaced = ov.postId;
+            }
+          }
           let postId, photoIds = [];
           if (images.length === 1) {
             const img = images[0];
@@ -1018,7 +1029,7 @@ ${weather.join("\n")}
           };
           const ref = await db().ref("/fbpost/posts").push(rec);
           if (meta.date && meta.slot) await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).update({ status: isScheduled ? "scheduled" : "published", postId, recId: ref.key, updatedAt: Date.now() });
-          return res.json({ ok: true, postId, id: ref.key, scheduled: !!isScheduled });
+          return res.json({ ok: true, postId, id: ref.key, scheduled: !!isScheduled, replaced });
         }
 
         case "limitTest": {
