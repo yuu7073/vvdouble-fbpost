@@ -438,6 +438,7 @@
       <label>分類連結</label><textarea id="sCats" style="min-height:70px" placeholder="名稱|網址，一行一個"></textarea><span></span>
       <label>reurl API Key</label><input type="password" id="sReurl" placeholder="留空＝不更動"><span></span>
       <label>Bitly Token</label><input type="password" id="sBitly" placeholder="留空＝不更動（備用，有 reurl 就不用）"><span></span>
+      <label></label><div class="row"><button class="sm" id="reshortBtn">排程中貼文 bit.ly → reurl</button><span class="muted" id="reshortMsg"></span></div><span></span>
     </div>
   </div>
   <div class="card">
@@ -675,6 +676,7 @@ $('#wNext').addEventListener('click', function(){ var d = fromIso(S.monday); d.s
 $('#wToday').addEventListener('click', function(){ S.monday = iso(mondayOf(new Date())); loadWeek(); });
 $('#wRefresh').addEventListener('click', loadWeek);
 $('#tipsRe').addEventListener('click', function(){ loadTips(true); });
+$('#reshortBtn').addEventListener('click', async function(){ var m = $('#reshortMsg'); m.textContent = '處理中…'; try { var r = await api('reshorten', {}); var ok = r.items.filter(function(i){ return i.ok; }).length, bad = r.items.filter(function(i){ return !i.ok; }); m.textContent = '完成：換了 ' + ok + ' 篇' + (bad.length ? '，失敗 ' + bad.length + '：' + bad.map(function(b){ return b.error; }).join('；') : '') + (r.items.length ? '' : '（沒有需要換的）'); } catch (e) { m.textContent = e.message; } });
 async function loadTips(force){
   var ds = weekDates();
   $('#tips').innerHTML = '<span class="muted">產生中…</span>';
