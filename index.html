@@ -119,6 +119,7 @@
   .preview .ph{display:flex;gap:10px;align-items:center;padding:12px}
   .preview .ph .av{width:40px;height:40px;border-radius:50%;background:#f3b63b;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff}
   .preview .pm{padding:0 12px 12px;white-space:pre-wrap;font-size:14px;line-height:1.5;word-break:break-all}
+  .symp .copied{background:#dcfce7!important;border-color:#16a34a!important}
   .preview .pi{display:grid;gap:2px}
   .preview .pi .pc{position:relative;overflow:hidden;background:#eee}
   .preview .pi .pc img{width:100%;height:100%;object-fit:cover;display:block}
@@ -1218,7 +1219,7 @@ function renderSym(){
   $$('#symCats button').forEach(function(b){ b.addEventListener('click', function(){ S.symCat = b.dataset.c; renderSym(); }); });
   $('#symKeys').innerHTML = (d[S.symCat] || []).map(function(s){ return '<span>' + esc(s) + '</span>'; }).join('');
   $$('#symKeys span').forEach(function(k){
-    k.addEventListener('click', function(){ insertAtCursor(k.textContent); });
+    k.addEventListener('click', function(){ copyText(k.textContent); k.classList.add('copied'); setTimeout(function(){ k.classList.remove('copied'); }, 500); });
     k.addEventListener('contextmenu', function(e){ e.preventDefault(); var v = k.textContent; var i = S.favs.indexOf(v); if (i >= 0) S.favs.splice(i, 1); else S.favs.unshift(v); S.favs = S.favs.slice(0, 60); localStorage.setItem('fbpost_favs', JSON.stringify(S.favs)); if (S.symG === 'FAV') renderSym(); });
   });
 }
@@ -1241,7 +1242,12 @@ function withUtm(base){
   try { var u = new URL(base); u.searchParams.set('utm_source', S.cfg.utmSource || 'fb'); u.searchParams.set('utm_medium', S.cfg.utmMedium || 'ad'); u.searchParams.set('utm_campaign', utmCampaign(publishTs())); return u.toString(); } catch (e) { return ''; }
 }
 function currentLink(){ var base = $('#linkSel').value === 'custom' ? $('#linkCustom').value.trim() : $('#linkSel').value; return base ? withUtm(base) : ''; }
-function renderLink(){ $('#linkOut').textContent = (S.shortUrl ? S.shortUrl + '  ←  ' : '') + (currentLink() || '—'); }
+function copyText(t, el){ (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){ if (el) { var o = el.textContent; el.textContent = '已複製'; setTimeout(function(){ el.textContent = o; }, 900); } }).catch(function(){ var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }); }
+function renderLink(){
+  var full = currentLink() ? withUtm(currentLink()) : '';
+  $('#linkOut').innerHTML = (full ? '<div class="muted" style="word-break:break-all">' + esc(full) + '</div>' : '—') + (S.shortUrl ? '<div style="margin-top:4px"><b>' + esc(S.shortUrl) + '</b> <button class="sm" id="copyShort" title="複製短網址">⧉ 複製</button></div>' : '');
+  var b = $('#copyShort'); if (b) b.addEventListener('click', function(){ copyText(S.shortUrl, b); });
+}
 $('#shortBtn').addEventListener('click', async function(){ var l = currentLink(); if (!l) return; try { var r = await api('shorten', { url: l }); S.shortUrl = r.short; renderLink(); } catch (e) { say($('#pubMsg'), e.message, 'err'); } });
 $('#insLink').addEventListener('click', function(){
   var l = S.shortUrl || currentLink(); if (!l) return;
