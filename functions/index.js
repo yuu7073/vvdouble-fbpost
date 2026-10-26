@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26r";
+const VERSION = "2026-10-26s";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -940,6 +940,41 @@ ${weather.join("\n")}
           const outp = { summary: j.summary || "", tips: Array.isArray(j.tips) ? j.tips.slice(0, 8) : [], weather, holidays: hol, at: Date.now() };
           await db().ref(key).set(outp);
           return res.json(outp);
+        }
+        case "reshorten": {
+          // 把「已排程未發布」貼文裡的 bit.ly 全部換成 reurl，並更新粉專上的排程貼文
+          if (!cfg.reurlKey) return res.status(400).json({ error: "尚未設定 reurl API Key" });
+          if (!cfg.metaToken) return res.status(400).json({ error: "尚未設定 Meta" });
+          const snap = await db().ref("/fbpost/posts").get();
+          const shortSnap = await db().ref("/fbpost/short").get();
+          const byShort = {}; if (shortSnap.exists()) Object.values(shortSnap.val()).forEach((v) => { if (v && v.short) byShort[v.short] = v.url; });
+          const out = [];
+          if (snap.exists()) {
+            for (const [id, v] of Object.entries(snap.val())) {
+              if (!v || v.status !== "scheduled" || !v.postId) continue;
+              const links = Array.from(new Set((v.message || "").match(/https?:\/\/bit\.ly\/\S+/g) || []));
+              if (!links.length) continue;
+              let msg = v.message, bad = "";
+              for (const l of links) {
+                const orig = byShort[l];
+                if (!orig) { bad = "找不到原網址：" + l; break; }
+                try { const ns = await shorten(cfg, orig); msg = msg.split(l).join(ns); } catch (e) { bad = e.message; break; }
+              }
+              if (bad) { out.push({ id, postId: v.postId, ok: false, error: bad }); continue; }
+              try {
+                await fbPost(cfg.metaToken, "/" + v.postId, { message: msg });
+                await db().ref("/fbpost/posts/" + id).update({ message: msg, link: v.link && byShort[v.link] ? await shorten(cfg, byShort[v.link]) : (v.link || ""), reshortAt: Date.now() });
+                if (v.scheduledAt) {
+                  // 同步週曆格子的文案
+                  const d = new Date(v.scheduledAt + 8 * 3600000).toISOString().slice(0, 10);
+                  const sl = await db().ref("/fbpost/slots/" + d).get();
+                  if (sl.exists()) for (const [slot, c] of Object.entries(sl.val())) if (c && c.postId === v.postId) await db().ref(`/fbpost/slots/${d}/${slot}`).update({ message: msg, shortUrl: c.shortUrl && byShort[c.shortUrl] ? await shorten(cfg, byShort[c.shortUrl]) : (c.shortUrl || "") });
+                }
+                out.push({ id, postId: v.postId, ok: true, n: links.length });
+              } catch (e) { out.push({ id, postId: v.postId, ok: false, error: e.message }); }
+            }
+          }
+          return res.json({ items: out });
         }
         case "saveSlot": {
           const { date, slot, data } = body;
