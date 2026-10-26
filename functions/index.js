@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26u";
+const VERSION = "2026-10-26v";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -405,15 +405,17 @@ hashtag：只有我說「要 hashtag」才在最後加一行：#VVDOUBLE #大尺
 行銷大活動：有趣味的口吻；第 1 行用【　】框活動名 第 2 行講活動最大的好處或期間；詳述換成活動機制 2～3 行，每行一個重點。
 門市陳列／影片：像在聊天，一句畫面感開場、一句真實感受；中段 2～3 行講怎麼搭、穿起來的感覺。有給「門市資訊」時，商品資訊那段改放門市資訊（兩行，一字不改，ꔛ 符號保留）；有商品資料才另外加商品全名與單品連結。
 門市店員實穿（貼文類型是「店員實穿」時用這個固定結構，取代上面的通用結構）：
+整篇不空行，每行都緊接著上一行（分隔只用「-」那一行）：
 第 1 行：#門市店員實穿 ♡ {門市名}
-第 2～4 行：各以 ⛧ 開頭，每行一句來門市試穿的好處，用問句或對話感（例：版型適不適合？穿上鏡子一照就知道！／不用盲買 面料親膚度 彈性現場親手感受／不知道怎麼搭配？來門市讓我們幫妳量身打造OOTD！），要換句不要照抄範例
+第 2 行：「{一個符號}{第 3 行連結的名稱}➤{網址}」，例：✱NEW新品➤https://bit.ly/xxx（用我提供的第 3 行連結，名稱可加「新品」這類兩字修飾，網址一字不改）
+第 3～5 行：各以 ⛧ 開頭，每行一句來門市試穿的好處，用問句或對話感（例：版型適不適合？穿上鏡子一照就知道！／不用盲買 面料親膚度 彈性現場親手感受／不知道怎麼搭配？來門市讓我們幫妳量身打造OOTD！），要換句不要照抄範例
 一行「-」
 ♡ STAFF's PICK
 每款商品一行：「{條列符號}商品名 單品網址」（商品名不含色名、不含《獨家自訂》這類前綴）；多款就接著列。有給「STAFF's PICK 清單」就照清單每行加上條列符號，不用商品資料、不改字
 一行「-」
 ♡ STAFF Body Shape - {STAFF Body Shape}（沒給就省略這行）
-最後接門市資訊兩行（有給才放）
-這個結構裡不要 hook、不要前綴連結行、不要 hashtag（第 1 行的 #門市店員實穿 是固定的，不算）。`;
+接著直接放門市資訊兩行（有給才放，不空行）
+這個結構裡不要 hook、不要 hashtag（第 1 行的 #門市店員實穿 是固定的，不算）、不要任何空行。`;
 
 function orientName(type) {
   if (/^new_|^new$|restock/.test(type)) return "新品介紹";
@@ -799,7 +801,8 @@ exports.fbpost = onRequest(
           const l3 = line3 && line3.url ? `第 3 行連結：${line3.name}→ ${line3.url}` : `第 3 行連結：從分類連結挑一個\n分類連結：\n${cats || "（無）"}`;
           const user = `貼文類型：${TYPE_LABEL[type] || type}\n${extra ? "這次要強調：" + extra + "\n" : ""}${model ? "MODEL 資訊：" + model + "\n" : ""}${l3}\n第 3 行前綴：${pfx || "不加"}\n${hashtags ? "要 hashtag" : "不要 hashtag"}\n${storeInfo ? "門市資訊（原樣照抄，但把 ꔛ 換成這篇的框符號 " + SYM.wrap + "）：\n" + storeInfo + "\n" : ""}這篇用的符號：條列符號「${SYM.bullet}」、心／標題符號「${SYM.heart}」、分隔線「${SYM.dash}」；規則裡寫的 ⛧ ♡ ꔛ - 一律換成這組，3 個版本可以各自再換成別的裝飾符號，不要三版都一樣。\n${storeName ? "門市名：" + storeName + "\n" : ""}${bodyShape ? "STAFF Body Shape：" + bodyShape + "\n" : ""}${picks ? "STAFF's PICK 清單（原樣照抄 不改字 順序不變）：\n" + picks + "\n" : ""}\n商品資料：\n${desc || "（無商品資料，請依貼文類型與強調重點撰寫）"}`;
           const text = await claude(cfg, copySystem(cfg, type), user);
-          const variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
+          let variants = text.split(/\n?===+\n?/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
+          if (/staff/.test(type)) variants = variants.map((v) => v.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim()).join("\n"));
           return res.json({ variants });
         }
 
