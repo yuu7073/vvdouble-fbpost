@@ -130,8 +130,8 @@
   .preview .pi.n4.lan{grid-template-columns:1fr 1fr 1fr}.preview .pi.n4.lan .pc:first-child{grid-column:1/4;aspect-ratio:2/1}.preview .pi.n4.lan .pc{aspect-ratio:1}
   .preview .pi.n4.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr 1fr}.preview .pi.n4.por .pc:first-child{grid-row:1/4;aspect-ratio:2/3}.preview .pi.n4.por .pc:not(:first-child){aspect-ratio:1}
   .preview .pi.n5.lan{grid-template-columns:repeat(6,1fr)}.preview .pi.n5.lan .pc:nth-child(-n+2){grid-column:span 3;aspect-ratio:1}.preview .pi.n5.lan .pc:nth-child(n+3){grid-column:span 2;aspect-ratio:1}
-  .preview .pi.n5.por{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr 1fr}.preview .pi.n5.por .pc:first-child{grid-row:1/4;aspect-ratio:2/3}.preview .pi.n5.por .pc:not(:first-child){aspect-ratio:1}.preview .pi.n5.por .pc:nth-child(5){display:none}
-  .preview .pi.lan .b4{display:none}
+  .preview .pi.n5.por{grid-template-columns:repeat(6,1fr)}.preview .pi.n5.por .pc:nth-child(-n+2){grid-column:span 3;aspect-ratio:1}.preview .pi.n5.por .pc:nth-child(n+3){grid-column:span 2;aspect-ratio:1}
+  .preview .pi .b4{display:none}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   th{color:var(--mute);font-weight:500;font-size:12px}
@@ -243,6 +243,7 @@
       <div class="dbx"><div class="folders" id="folders"></div><div class="files" id="files"></div></div>
     </div>
     <div id="slWrap" class="files hide"></div>
+    <div id="selWarn" class="red hide" style="font-size:12px;margin:6px 0"></div>
     <div class="sel" id="sel"></div>
   </div>
 
@@ -942,6 +943,8 @@ function processImage(im, srcUrl, idx){
 async function reprocessAll(){ for (var i = 0; i < S.images.length; i++) { var im = S.images[i]; if (im.orig) { try { await processImage(im, im.orig, i); } catch (e) {} } } renderSel(); }
 function renderSel(){ if (!S.opening) { autosave(); if (TYPES[S.type].ratioPick) guessStore(); }
   var t = TYPES[S.type];
+  var ims0 = S.images.filter(function(i){ return i.preview; }); var warn = ims0.length > 4 && ims0[0] && ims0[0].h > ims0[0].w ? '⚠ 超過 4 張時 FB 會把直式首圖裁成正方形（上 2 下 3 排法）；要首圖完整顯示請只放 4 張' : '';
+  var wEl = $('#selWarn'); if (wEl) { wEl.textContent = warn; wEl.classList.toggle('hide', !warn); }
   $('#sel').innerHTML = S.images.map(function(im, i){
     return '<div class="it" draggable="true" data-i="' + i + '"><img src="' + esc(im.preview || im.thumb || '') + '"><b data-i="' + i + '">✕</b><small>' + (im.loading ? '處理中…' : im.error ? '<span class="red">' + esc(im.error) + '</span>' : (im.w + '×' + im.h)) + '</small><div class="mv"><button class="sm" data-mv="-1" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + '>◀</button><button class="sm" data-mv="1" data-i="' + i + '"' + (i === S.images.length - 1 ? ' disabled' : '') + '>▶</button></div>' + (i === 0 && !t.video && im.base ? '<button class="sm" data-lab="' + i + '">圖文</button>' : '') + '</div>';
   }).join('');
