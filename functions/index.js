@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26z";
+const VERSION = "2026-10-26r";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -108,24 +108,25 @@ function addDays(iso, n) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(
 
 // ---------- reurl.cc 短網址 ----------
 async function shorten(cfg, url) {
-  if (!cfg.bitlyToken && !cfg.reurlKey) throw new Error("尚未設定 Bitly Token 或 reurl API Key");
+  if (!cfg.bitlyToken && !cfg.reurlKey) throw new Error("尚未設定 reurl API Key");
+  const prov = cfg.reurlKey ? "reurl" : "bitly"; // reurl 優先（bit.ly 會先跳一個中介頁）
   const key = Buffer.from(url).toString("base64url").slice(0, 120);
   const ref = db().ref("/fbpost/short/" + key);
   const s = await ref.get();
-  if (s.exists() && s.val().short) return s.val().short;
+  if (s.exists() && s.val().short && (s.val().prov || "bitly") === prov) return s.val().short;
   let short;
-  if (cfg.bitlyToken) {
-    const r = await fetch("https://api-ssl.bitly.com/v4/shorten", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + cfg.bitlyToken }, body: JSON.stringify({ long_url: url }) });
-    const j = await r.json().catch(() => ({}));
-    if (!j.link) throw new Error("Bitly 失敗：" + (j.description || j.message || JSON.stringify(j).slice(0, 160)));
-    short = j.link;
-  } else {
+  if (prov === "reurl") {
     const r = await fetch("https://api.reurl.cc/shorten", { method: "POST", headers: { "Content-Type": "application/json", "reurl-api-key": cfg.reurlKey }, body: JSON.stringify({ url }) });
     const j = await r.json().catch(() => ({}));
     if (!j.short_url) throw new Error("reurl 失敗：" + JSON.stringify(j).slice(0, 160));
     short = j.short_url;
+  } else {
+    const r = await fetch("https://api-ssl.bitly.com/v4/shorten", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + cfg.bitlyToken }, body: JSON.stringify({ long_url: url }) });
+    const j = await r.json().catch(() => ({}));
+    if (!j.link) throw new Error("Bitly 失敗：" + (j.description || j.message || JSON.stringify(j).slice(0, 160)));
+    short = j.link;
   }
-  await ref.set({ url, short, at: Date.now() });
+  await ref.set({ url, short, prov, at: Date.now() });
   return short;
 }
 
@@ -513,7 +514,7 @@ exports.fbpost = onRequest(
             utmSource: cfg.utmSource || "fb",
             utmMedium: cfg.utmMedium || "ad",
             dropboxStaff: cfg.dropboxStaff || "",
-            reurl: !!(cfg.bitlyToken || cfg.reurlKey), shortener: cfg.bitlyToken ? "bitly" : cfg.reurlKey ? "reurl" : "",
+            reurl: !!(cfg.bitlyToken || cfg.reurlKey), shortener: cfg.reurlKey ? "reurl" : cfg.bitlyToken ? "bitly" : "",
             scheduleSheet: cfg.scheduleSheet || "1vrsXPERq4ppkHmlhdwU3IHKc6WZrgN9Kc8H97mvVQAs",
             scheduleYear: Number(cfg.scheduleYear) || 2026,
             serviceEmail: await serviceEmail(),
