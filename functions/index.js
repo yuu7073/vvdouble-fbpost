@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26t";
+const VERSION = "2026-10-26u";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -1021,10 +1021,17 @@ exports.fbpost = onRequest(
         // ----- 發布 -----
         case "publish": {
           if (!cfg.metaToken || !cfg.pageId) return res.status(400).json({ error: "尚未設定 Meta" });
-          const { message = "", images = [], link = "", scheduledAt = 0, meta = {} } = body;
+          const { images = [], link = "", scheduledAt = 0, meta = {} } = body;
           if (!message.trim() && !images.length) return res.status(400).json({ error: "沒有內容" });
           const token = cfg.metaToken, page = cfg.pageId;
           const isScheduled = scheduledAt && scheduledAt > Date.now() + 10 * 60000;
+          // 文案裡若還有 bit.ly（舊快取），發布前一律換成目前的短網址服務
+          let message = String(body.message || "");
+          if (cfg.reurlKey && /bit\.ly\//.test(message)) {
+            const shortSnap = await db().ref("/fbpost/short").get(); const byShort = {};
+            if (shortSnap.exists()) Object.values(shortSnap.val()).forEach((v) => { if (v && v.short) byShort[v.short] = v.url; });
+            for (const l of Array.from(new Set(message.match(/https?:\/\/bit\.ly\/\S+/g) || []))) { if (byShort[l]) { try { message = message.split(l).join(await shorten(cfg, byShort[l])); } catch (e) {} } }
+          }
           const schedule = isScheduled ? { published: "false", scheduled_publish_time: String(Math.floor(scheduledAt / 1000)) } : {};
           // 同一格重新排程：先把舊的「已排程」貼文從粉專刪掉，避免同時段出現兩篇
           let replaced = null;
