@@ -100,11 +100,19 @@
   .sel .it .mv{display:flex;gap:2px;margin-top:3px}.sel .it .mv button{margin:0;padding:3px 0;font-size:12px}
   .sel .it.drag{opacity:.4}.sel .it.over img{outline:2px solid var(--p,#2563eb)}
   textarea#msg{width:100%;min-height:220px;resize:vertical;line-height:1.6}
-  .vars{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .step{display:grid;grid-template-columns:140px 1fr;gap:10px 16px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
+  h2+.step,h2+.hide+.step{border-top:none}
+  .step .lab{display:flex;gap:8px;align-items:center;font-weight:600;font-size:14px}
+  .step .lab i{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#fde7c4;color:#9a5b00;font-style:normal;font-size:12px;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .step .lab small{font-weight:400;color:var(--mute);font-size:12px;display:block}
+  .step .f{display:flex;flex-direction:column;gap:4px}.step .f>label{font-size:12px;color:var(--mute)}.step .f>label b{color:#e0245e}
+  .acts label{display:inline-flex;gap:6px;align-items:center;background:#f6f7f9;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px}
+  .vars{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .var{border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap;cursor:pointer;max-height:220px;overflow:auto;background:#fafbfd}
+  .var.on{border-color:var(--p,#2563eb);background:#eef3ff}
+  .var b{display:inline-block;background:var(--ink);color:#fff;font-size:11px;padding:1px 8px;border-radius:999px;font-weight:600;margin-bottom:4px}
   .var:hover{border-color:var(--acc)}
   .link{font-family:ui-monospace,Consolas,monospace;font-size:12px;word-break:break-all;background:#f7f8fb;padding:8px;border-radius:6px;margin-top:8px}
-  .acts label{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:4px 0}
   .symp{border:1px solid var(--line);border-radius:8px;margin-top:8px;background:#fff}
   .symp .st{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:4px 6px;overflow:auto}
   .symp .st button{border:none;padding:4px 10px;font-size:12px;color:var(--mute);border-radius:6px}
@@ -256,28 +264,51 @@
 
   <div class="card">
     <h2><span class="n">4</span>文案</h2>
-    <div class="acts" id="acts"></div>
-    <div id="staffBox" class="hide" style="margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
-      <div class="row"><select id="storeSel"><option value="">選門市</option></select><input type="text" id="bodyShape" placeholder="STAFF Body Shape（例：L / XL）" style="max-width:220px"></div>
-      <div class="row" style="margin-top:8px;align-items:flex-start"><textarea id="picksIn" placeholder="STAFF's PICK：每行一個商品網址或品名" style="flex:1;min-height:64px"></textarea><button id="picksGo">整理</button></div>
-      <textarea id="picksOut" placeholder="整理後的清單（可直接改）" style="width:100%;min-height:64px;margin-top:6px" class="hide"></textarea>
+    <div class="step hide" id="staffBox">
+      <div class="lab"><i>1</i><div>門市與單品<small>實穿／陳列</small></div></div>
+      <div>
+        <div class="row">
+          <div class="f"><label>門市 <b>*</b></label><select id="storeSel"><option value="">選門市</option></select></div>
+          <div class="f"><label>STAFF Body Shape</label><input type="text" id="bodyShape" placeholder="L / XL" style="max-width:140px"></div>
+        </div>
+        <div class="row" style="margin-top:8px;align-items:flex-end"><div class="f" style="flex:1"><label>單品（每行一個網址或品名）</label><textarea id="picksIn" style="width:100%;min-height:56px"></textarea></div><button id="picksGo">整理</button></div>
+        <textarea id="picksOut" placeholder="整理後的清單（可直接改）" style="width:100%;min-height:56px;margin-top:6px" class="hide"></textarea>
+      </div>
     </div>
-    <div class="row" style="margin:8px 0">
-      <label class="muted" style="font-size:12px">第 3 行</label><select id="line3" style="max-width:260px"></select><select id="pfx"><option value="random">隨機符號</option><option value="最後限貨">最後限貨</option><option value="馬上來看">馬上來看</option><option value="">無前綴</option></select><label style="font-size:13px"><input type="checkbox" id="hashOn"> hashtag</label>
+    <div class="step">
+      <div class="lab"><i>2</i><div>連結與活動</div></div>
+      <div>
+        <div class="row">
+          <div class="f"><label>第 3 行連結 <b>*</b></label><select id="line3" style="max-width:260px"></select></div>
+          <div class="f"><label>前綴</label><select id="pfx"><option value="random">隨機符號</option><option value="最後限貨">最後限貨</option><option value="馬上來看">馬上來看</option><option value="">無前綴</option></select></div>
+          <div class="f"><label>&nbsp;</label><label style="font-size:14px;color:var(--ink)"><input type="checkbox" id="hashOn"> hashtag</label></div>
+        </div>
+        <div class="row acts" id="acts" style="margin-top:10px"></div>
+      </div>
     </div>
-    <div class="row" style="margin:8px 0">
-      <input type="text" id="extra" placeholder="這次要強調的點（選填）">
-      <select id="model"><option value="">主要 model（全部）</option></select>
-      <button id="copyBtn" class="p">AI 產 3 版</button>
-      <button id="symToggle">符號</button>
+    <div class="step">
+      <div class="lab"><i>3</i><div>產生</div></div>
+      <div class="row">
+        <input type="text" id="extra" placeholder="這次要強調的點（選填）" style="flex:1">
+        <select id="model"><option value="">主要 model（全部）</option></select>
+        <button id="copyBtn" class="p">AI 產 3 版</button>
+      </div>
     </div>
-    <div id="vars" class="vars"></div>
-    <textarea id="msg" placeholder="文案"></textarea>
-    <div class="row" style="margin:6px 0"><button id="editBtn">照註記修改</button><span class="muted" style="font-size:12px">在文案裡用（ ）寫指示，例：（兩行敘述）（連結）</span><span class="sp"></span><span id="editMsg" class="muted"></span></div>
-    <div class="symp" id="symp">
-      <div class="st"><button class="on" data-g="EMOJI">Emoji</button><button data-g="SYM">符號</button><button data-g="KAO">顏文字</button><button data-g="FAV">常用</button></div>
-      <div class="cats" id="symCats"></div>
-      <div class="keys" id="symKeys"></div>
+    <div class="step hide" id="varsStep">
+      <div class="lab"><i>4</i><div>挑版本<small>點一個帶入下方</small></div></div>
+      <div id="vars" class="vars"></div>
+    </div>
+    <div class="step">
+      <div class="lab"><i>5</i><div>最終文案<small>可直接改</small></div></div>
+      <div>
+        <textarea id="msg" placeholder="文案"></textarea>
+        <div class="row" style="margin:6px 0"><button id="editBtn">照註記修改</button><span class="muted" style="font-size:12px">文案裡用（ ）寫指示，例：（兩行敘述）（連結）</span><span class="sp"></span><span id="editMsg" class="muted"></span></div>
+        <div class="row" style="align-items:flex-start"><span class="muted" style="font-size:12px;width:40px;padding-top:6px">符號</span><div class="symp" id="symp" style="flex:1">
+          <div class="st"><button class="on" data-g="EMOJI">Emoji</button><button data-g="SYM">符號</button><button data-g="KAO">顏文字</button><button data-g="FAV">常用</button><button id="symToggle">收合</button></div>
+          <div class="cats" id="symCats"></div>
+          <div class="keys" id="symKeys"></div>
+        </div></div>
+      </div>
     </div>
   </div>
 
@@ -704,7 +735,7 @@ async function openSlot(date, slot){
   $('#type').value = S.type;
   $('#at').value = date + 'T' + slot.slice(0,2) + ':' + slot.slice(2);
   S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store; $('#bodyShape').value = c.bodyShape || ''; $('#picksIn').value = c.picksIn || ''; $('#picksOut').value = c.picksOut || ''; $('#picksOut').classList.toggle('hide', !c.picksOut);
-  $('#msg').value = c.message || ''; $('#extra').value = c.extra || ''; $('#vars').innerHTML = ''; $('#pubMsg').textContent = '';
+  $('#msg').value = c.message || ''; $('#extra').value = c.extra || ''; $('#vars').innerHTML = ''; $('#varsStep').classList.add('hide'); $('#pubMsg').textContent = '';
   $('#linkCustom').value = c.linkCustom || '';
   if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig, cam: im.cam || null, lab: im.lab || null }); }); }
   applyType(); renderProds(); renderChips(); renderLinkOptions(); if (c.link) $('#linkSel').value = c.link;
@@ -755,7 +786,7 @@ function applyType(){
   $('#cardImg').classList.toggle('hide', !!t.video);
   $('#cardVideo').classList.toggle('hide', !t.video);
   $('#imgHint').textContent = S.noCrop ? '維持原比例' : (t.firstOnly ? '首圖裁成 ' + spec().w + '×' + spec().h + '，其餘不裁' : '裁成 ' + spec().w + '×' + spec().h) + (t.max ? '，最多 ' + t.max + ' 張' : t.min ? '，最少 ' + t.min + ' 張' : '');
-  $('#ratioSeg').classList.toggle('hide', !!t.video); $('#staffBox').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $('#picksIn').parentNode.classList.toggle('hide', !t.picksBox); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || t.ratio || 'h')); });
+  $('#ratioSeg').classList.toggle('hide', !!t.video); $('#staffBox').classList.toggle('hide', !t.ratioPick); $('#bodyShape').classList.toggle('hide', !t.staffCopy); $('#picksIn').parentNode.parentNode.classList.toggle('hide', !t.picksBox); $$('#ratioSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.ratioOv || t.ratio || 'h')); });
   var tf2 = teamsFolderFor(S.type); if (tf2 && !S.opening) dbxLoad(tf2);
 }
 $('#storeSel').innerHTML = '<option value="">選門市</option>' + STORES.map(function(st, i){ return '<option value="' + i + '">' + st.name + '</option>'; }).join('');
@@ -1132,7 +1163,7 @@ $('#teamsRun').addEventListener('click', function(){ teamsRun(false); });
 function curActs(){ var d = ($('#at').value || '').slice(0, 10) || iso(new Date()); return S.acts.filter(function(a){ return a.start <= d && a.end >= d; }); }
 function renderActs(){
   var acts = curActs();
-  $('#acts').innerHTML = acts.length ? '<div class="muted" style="margin-bottom:2px">本週活動</div>' + acts.map(function(a, i){ return '<label><input type="checkbox" data-i="' + i + '"' + (TYPES[S.type].act ? ' checked' : '') + '> <span>' + esc(a.name) + (a.url ? '' : ' <span class="red">缺網址</span>') + '</span></label>'; }).join('') + '<button class="sm" id="insActs">帶入文案</button>' : '';
+  $('#acts').innerHTML = acts.length ? '<span class="muted" style="font-size:12px;width:52px">本週活動</span>' + acts.map(function(a, i){ return '<label><input type="checkbox" data-i="' + i + '"' + (TYPES[S.type].act ? ' checked' : '') + '> <span>' + esc(a.name) + (a.url ? '' : ' <span class="red">缺網址</span>') + '</span></label>'; }).join('') + '<button class="sm" id="insActs">帶入文案</button>' : '<span class="muted" style="font-size:12px">本週沒有活動</span>';
   var b = $('#insActs'); if (b) b.addEventListener('click', insertActs);
   renderLine3();
 }
@@ -1198,13 +1229,15 @@ $('#copyBtn').addEventListener('click', async function(){
     var l3 = line3Pick(); if (l3 && l3.url) l3 = { name: l3.name, url: await shortLink(l3.url) };
     var stO = STORES[Number($('#storeSel').value)], stB = TYPES[S.type].ratioPick ? storeBlock(stO) : '';
     var r = await api('copy', { products: prods, catLinks: cats, type: S.type, model: model, line3: l3, prefix: $('#pfx').value, hashtags: $('#hashOn').checked, storeInfo: stB, storeName: stO ? stO.name : '', bodyShape: $('#bodyShape').value, picks: TYPES[S.type].picksBox ? $('#picksOut').value.trim() : '', extra: $('#extra').value + (curActs().length ? '；本週活動：' + curActs().map(function(a){ return a.name; }).join('、') : '') });
-    $('#vars').innerHTML = r.variants.map(function(v){ return '<div class="var">' + esc(v) + '</div>'; }).join('');
-    $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $('#msg').value = d.textContent; renderPreview(); autosave(); }); });
-    if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; renderPreview(); autosave(); }
+    var VL = ['精簡', '標準', '故事'];
+    $('#varsStep').classList.remove('hide');
+    $('#vars').innerHTML = r.variants.map(function(v, i){ return '<div class="var"><b>' + (VL[i] || i + 1) + '</b>\n' + esc(v) + '</div>'; }).join('');
+    $$('#vars .var').forEach(function(d){ d.addEventListener('click', function(){ $$('#vars .var').forEach(function(x){ x.classList.toggle('on', x === d); }); $('#msg').value = d.textContent.replace(/^(精簡|標準|故事|\d+)\n/, ''); renderPreview(); autosave(); }); });
+    if (!$('#msg').value && r.variants[0]) { $('#msg').value = r.variants[0]; var f0 = $('#vars .var'); if (f0) f0.classList.add('on'); renderPreview(); autosave(); }
   } catch (e) { $('#vars').innerHTML = '<span class="red">' + esc(e.message) + '</span>'; }
 });
 
-$('#symToggle').addEventListener('click', function(){ $('#symp').classList.toggle('hide'); renderSym(); });
+$('#symToggle').addEventListener('click', function(){ var k = $('#symKeys'), c = $('#symCats'); k.classList.toggle('hide'); c.classList.toggle('hide'); $('#symToggle').textContent = k.classList.contains('hide') ? '展開' : '收合'; });
 renderSym();
 $('#editBtn').addEventListener('click', async function(){
   var txt = $('#msg').value; if (!txt.trim()) return;
