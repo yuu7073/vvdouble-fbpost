@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-27c";
+const VERSION = "2026-10-27d";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -1136,7 +1136,7 @@ exports.fbpost = onRequest(
             const ps = await db().ref("/fbpost/posts").limitToLast(30).get();
             if (ps.exists()) for (const v of Object.values(ps.val())) {
               if (!v || v.status !== "published" || !v.postId || now - (v.publishedAt || v.createdAt) > 48 * 3600000) continue;
-              try { const j = await fbGet(token, "/" + v.postId, { fields: "created_time,insights.metric(post_impressions_unique)" }); const d = (((j.insights || {}).data || [])[0] || {}).values || []; reach.push({ postId: v.postId, type: v.type, at: j.created_time, reach: (d[0] || {}).value }); } catch (e) { reach.push({ postId: v.postId, err: e.message }); }
+              try { const j = await fbGet(token, "/" + v.postId, { fields: "created_time,insights.metric(post_impressions,post_clicks)" }); const ins = {}; (((j.insights || {}).data) || []).forEach((m) => { ins[m.name] = ((m.values || [])[0] || {}).value; }); reach.push({ postId: v.postId, type: v.type, at: j.created_time, impressions: ins.post_impressions, clicks: ins.post_clicks }); } catch (e) { reach.push({ postId: v.postId, err: e.message }); }
             }
           } catch (e) {}
           return res.json({ items: out, reach, at: now });
