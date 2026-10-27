@@ -1,6 +1,7 @@
 // VV DOUBLE · FB 貼文工具 · Cloud Function 中間站
 // 網頁 → 這裡（各家 Token 存在 Realtime Database /fbpost/config，前端讀不到）→ Meta / Dropbox / Shopline / Anthropic
 const { onRequest } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const SHOPLINE_TOKEN = defineSecret("SHOPLINE_TOKEN"); // 與官網批次中心共用
 const admin = require("firebase-admin");
@@ -8,7 +9,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-27e";
+const VERSION = "2026-10-27f";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -531,6 +532,45 @@ ${LAYOUT_RULES}
 ${cfg.copyRules ? "額外規則：" + cfg.copyRules : ""}
 輸出：恰好 3 個版本，第 1 版最精簡、第 3 版最有故事感，用「===」分隔，不加編號、不加標題、不加任何說明。`;
 }
+
+
+async function runQueue(cfg) {
+  // 每 5 分鐘由 GitHub 排程呼叫（X-Sync-Key），也可從工具手動觸發
+  if (!cfg.metaToken || !cfg.pageId) throw new Error("尚未設定 Meta");
+  const token = cfg.metaToken, page = cfg.pageId, now = Date.now();
+  const snap = await db().ref("/fbpost/queue").get();
+  const out = [];
+  if (snap.exists()) {
+    for (const [qid, q] of Object.entries(snap.val())) {
+      if (!q || q.scheduledAt > now) continue;
+      if (q.running && now - q.running < 5 * 60000) continue;
+      await db().ref("/fbpost/queue/" + qid).update({ running: now });
+      try {
+        const postId = await fbPublishNow(token, page, q.message || "", q.link || "", q.photoIds || []);
+        if (q.recId) await db().ref("/fbpost/posts/" + q.recId).update({ postId, status: "published", publishedAt: now });
+        if (q.date && q.slot) await db().ref(`/fbpost/slots/${q.date}/${q.slot}`).update({ status: "published", postId, queueId: null, error: null, updatedAt: now });
+        await db().ref("/fbpost/queue/" + qid).remove();
+        out.push({ qid, ok: true, postId, late: Math.round((now - q.scheduledAt) / 60000) });
+      } catch (e) {
+        const tries = (q.tries || 0) + 1;
+        await db().ref("/fbpost/queue/" + qid).update({ running: null, tries, error: e.message });
+        if (q.date && q.slot) await db().ref(`/fbpost/slots/${q.date}/${q.slot}`).update({ error: e.message });
+        if (tries >= 5) { await db().ref("/fbpost/queue/" + qid).remove(); if (q.recId) await db().ref("/fbpost/posts/" + q.recId).update({ status: "failed", error: e.message }); }
+        out.push({ qid, ok: false, error: e.message, tries });
+      }
+    }
+  }
+  // 順便回報最近 48 小時工具發出的貼文觸及，方便從排程 log 驗證
+  let reach = [];
+  try {
+    const ps = await db().ref("/fbpost/posts").limitToLast(30).get();
+    if (ps.exists()) for (const v of Object.values(ps.val())) {
+      if (!v || v.status !== "published" || !v.postId || now - (v.publishedAt || v.createdAt) > 48 * 3600000) continue;
+      try { const j = await fbGet(token, "/" + v.postId, { fields: "created_time,insights.metric(post_media_view,post_total_media_view_unique,post_clicks)" }); const ins = {}; (((j.insights || {}).data) || []).forEach((m) => { ins[m.name] = ((m.values || [])[0] || {}).value; }); reach.push({ postId: v.postId, type: v.type, at: j.created_time, views: ins.post_media_view, people: ins.post_total_media_view_unique, clicks: ins.post_clicks }); } catch (e) { reach.push({ postId: v.postId, err: e.message }); }
+    }
+  } catch (e) {}
+  return { items: out, reach, at: now };
+        }
 
 // ---------- 主程式 ----------
 exports.fbpost = onRequest(
@@ -1105,41 +1145,7 @@ exports.fbpost = onRequest(
         }
 
         case "queueRun": {
-          // 每 5 分鐘由 GitHub 排程呼叫（X-Sync-Key），也可從工具手動觸發
-          if (!cfg.metaToken || !cfg.pageId) return res.status(400).json({ error: "尚未設定 Meta" });
-          const token = cfg.metaToken, page = cfg.pageId, now = Date.now();
-          const snap = await db().ref("/fbpost/queue").get();
-          const out = [];
-          if (snap.exists()) {
-            for (const [qid, q] of Object.entries(snap.val())) {
-              if (!q || q.scheduledAt > now) continue;
-              if (q.running && now - q.running < 5 * 60000) continue;
-              await db().ref("/fbpost/queue/" + qid).update({ running: now });
-              try {
-                const postId = await fbPublishNow(token, page, q.message || "", q.link || "", q.photoIds || []);
-                if (q.recId) await db().ref("/fbpost/posts/" + q.recId).update({ postId, status: "published", publishedAt: now });
-                if (q.date && q.slot) await db().ref(`/fbpost/slots/${q.date}/${q.slot}`).update({ status: "published", postId, queueId: null, error: null, updatedAt: now });
-                await db().ref("/fbpost/queue/" + qid).remove();
-                out.push({ qid, ok: true, postId, late: Math.round((now - q.scheduledAt) / 60000) });
-              } catch (e) {
-                const tries = (q.tries || 0) + 1;
-                await db().ref("/fbpost/queue/" + qid).update({ running: null, tries, error: e.message });
-                if (q.date && q.slot) await db().ref(`/fbpost/slots/${q.date}/${q.slot}`).update({ error: e.message });
-                if (tries >= 5) { await db().ref("/fbpost/queue/" + qid).remove(); if (q.recId) await db().ref("/fbpost/posts/" + q.recId).update({ status: "failed", error: e.message }); }
-                out.push({ qid, ok: false, error: e.message, tries });
-              }
-            }
-          }
-          // 順便回報最近 48 小時工具發出的貼文觸及，方便從排程 log 驗證
-          let reach = [];
-          try {
-            const ps = await db().ref("/fbpost/posts").limitToLast(30).get();
-            if (ps.exists()) for (const v of Object.values(ps.val())) {
-              if (!v || v.status !== "published" || !v.postId || now - (v.publishedAt || v.createdAt) > 48 * 3600000) continue;
-              try { const j = await fbGet(token, "/" + v.postId, { fields: "created_time,insights.metric(post_media_view,post_total_media_view_unique,post_clicks)" }); const ins = {}; (((j.insights || {}).data) || []).forEach((m) => { ins[m.name] = ((m.values || [])[0] || {}).value; }); reach.push({ postId: v.postId, type: v.type, at: j.created_time, views: ins.post_media_view, people: ins.post_total_media_view_unique, clicks: ins.post_clicks }); } catch (e) { reach.push({ postId: v.postId, err: e.message }); }
-            }
-          } catch (e) {}
-          return res.json({ items: out, reach, at: now });
+          return res.json(await runQueue(cfg));
         }
 
         case "limitTest": {
@@ -1232,3 +1238,9 @@ exports.fbpost = onRequest(
     }
   }
 );
+
+// 每 5 分鐘：把到時間的排程貼文發出去（Cloud Scheduler，比 GitHub cron 準時）
+exports.fbpostQueue = onSchedule({ schedule: "every 5 minutes", region: "asia-east1", timeZone: "Asia/Taipei", memory: "512MiB", timeoutSeconds: 240 }, async () => {
+  const cfg = await loadConfig();
+  try { const r = await runQueue(cfg); console.log("queue", JSON.stringify({ items: r.items })); } catch (e) { console.error("queue error", e.message); }
+});
