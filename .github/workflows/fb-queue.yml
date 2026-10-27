@@ -1,0 +1,14 @@
+name: FB queue (every 5 min)
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish due posts
+        run: |
+          curl -sS -X POST "https://asia-east1-vvdouble-shopline.cloudfunctions.net/fbpost" \
+            -H "Content-Type: application/json" -H "X-Sync-Key: ${{ secrets.FBPOST_SYNC_KEY }}" \
+            -d '{"action":"queueRun"}' | head -c 2000

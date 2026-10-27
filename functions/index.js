@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-26v";
+const VERSION = "2026-10-27a";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -339,6 +339,15 @@ async function fbPost(token, path, fields, file) {
   if (!r.ok || j.error) throw new Error("Meta " + path + " " + (j.error ? j.error.message : r.status));
   return j;
 }
+
+async function fbPublishNow(token, page, message, link, photoIds) {
+  if (photoIds.length) {
+    const j = await fbPost(token, `/${page}/feed`, { message, published: "true", attached_media: photoIds.map((id) => ({ media_fbid: id })) });
+    return j.id;
+  }
+  const j = await fbPost(token, `/${page}/feed`, { message, link: link || undefined, published: "true" });
+  return j.id;
+}
 async function fbDelete(token, id) {
   const r = await fetch(GRAPH + "/" + id + "?access_token=" + encodeURIComponent(token), { method: "DELETE" });
   const j = await r.json().catch(() => ({}));
@@ -519,7 +528,7 @@ exports.fbpost = onRequest(
       return res.json({ ok: true, first: true });
     }
     const sk = req.get("X-Sync-Key") || "";
-    const viaSync = (action === "teamsSync" || action === "weekTipsAuto") && cfg.syncKey && sk === cfg.syncKey;
+    const viaSync = (action === "teamsSync" || action === "weekTipsAuto" || action === "queueRun") && cfg.syncKey && sk === cfg.syncKey;
     if (!viaSync && (!cfg.password || pw !== cfg.password)) return res.status(401).json({ error: cfg.password ? "密碼錯誤" : "尚未設定密碼" });
 
     try {
@@ -1032,42 +1041,70 @@ exports.fbpost = onRequest(
             if (shortSnap.exists()) Object.values(shortSnap.val()).forEach((v) => { if (v && v.short) byShort[v.short] = v.url; });
             for (const l of Array.from(new Set(message.match(/https?:\/\/bit\.ly\/\S+/g) || []))) { if (byShort[l]) { try { message = message.split(l).join(await shorten(cfg, byShort[l])); } catch (e) {} } }
           }
-          const schedule = isScheduled ? { published: "false", scheduled_publish_time: String(Math.floor(scheduledAt / 1000)) } : {};
-          // 同一格重新排程：先把舊的「已排程」貼文從粉專刪掉，避免同時段出現兩篇
+          // 同一格重新排程：先取消舊的（工具佇列或 FB 排程），避免同時段出現兩篇
           let replaced = null;
           if (meta.date && meta.slot) {
             const old = await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).get();
             const ov = old.exists() ? old.val() : {};
-            if (ov.postId && ov.status === "scheduled") {
-              try { await fbDelete(token, ov.postId); } catch (e) { if (!/does not exist|Unsupported/.test(e.message)) throw new Error("刪除舊排程失敗：" + e.message); }
+            if (ov.status === "scheduled") {
+              if (ov.queueId) { await db().ref("/fbpost/queue/" + ov.queueId).remove(); replaced = "queue"; }
+              else if (ov.postId) {
+                try { await fbDelete(token, ov.postId); } catch (e) { if (!/does not exist|Unsupported/.test(e.message)) throw new Error("刪除舊排程失敗：" + e.message); }
+                replaced = ov.postId;
+              }
               if (ov.recId) await db().ref("/fbpost/posts/" + ov.recId).update({ status: "deleted", deletedAt: Date.now(), replacedBy: "reschedule" });
-              replaced = ov.postId;
             }
           }
-          let postId, photoIds = [];
-          if (images.length === 1) {
-            const img = images[0];
-            const j = await fbPost(token, `/${page}/photos`, { message, ...schedule }, { buf: Buffer.from(img.b64, "base64"), mime: img.mime, name: img.name });
-            postId = j.post_id || j.id; photoIds = [j.id];
-          } else if (images.length > 1) {
-            for (const img of images) {
-              const j = await fbPost(token, `/${page}/photos`, { published: "false", temporary: "true" }, { buf: Buffer.from(img.b64, "base64"), mime: img.mime, name: img.name });
-              photoIds.push(j.id);
-            }
-            const j = await fbPost(token, `/${page}/feed`, { message, ...schedule, attached_media: photoIds.map((id) => ({ media_fbid: id })) });
-            postId = j.id;
-          } else {
-            const j = await fbPost(token, `/${page}/feed`, { message, link: link || undefined, ...schedule });
-            postId = j.id;
+          // 照片先上傳成「未發布」（不用 temporary，排程時才不會過期）
+          const photoIds = [];
+          for (const img of images) {
+            const j = await fbPost(token, `/${page}/photos`, { published: "false" }, { buf: Buffer.from(img.b64, "base64"), mime: img.mime, name: img.name });
+            photoIds.push(j.id);
           }
-          const rec = {
-            postId, photoIds, message, link, type: meta.type || "", skus: meta.skus || [], titles: meta.titles || [],
-            utm: meta.utm || "", imageCount: images.length, by: meta.by || "",
-            scheduledAt: isScheduled ? scheduledAt : 0, status: isScheduled ? "scheduled" : "published", createdAt: Date.now(),
+          const base = {
+            message, link, photoIds, type: meta.type || "", skus: meta.skus || [], titles: meta.titles || [],
+            utm: meta.utm || "", imageCount: images.length, by: meta.by || "", date: meta.date || "", slot: meta.slot || "", createdAt: Date.now(),
           };
-          const ref = await db().ref("/fbpost/posts").push(rec);
-          if (meta.date && meta.slot) await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).update({ status: isScheduled ? "scheduled" : "published", postId, recId: ref.key, updatedAt: Date.now() });
-          return res.json({ ok: true, postId, id: ref.key, scheduled: !!isScheduled, replaced });
+          if (isScheduled) {
+            // 排程：存進工具佇列，時間到由 queueRun 以「立即發布」方式發出（FB 自己的排程會沒有觸及）
+            const ref = await db().ref("/fbpost/posts").push(Object.assign({}, base, { postId: "", scheduledAt, status: "scheduled" }));
+            const q = await db().ref("/fbpost/queue").push(Object.assign({}, base, { scheduledAt, recId: ref.key }));
+            if (meta.date && meta.slot) await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).update({ status: "scheduled", postId: null, queueId: q.key, recId: ref.key, error: null, updatedAt: Date.now() });
+            return res.json({ ok: true, id: ref.key, queueId: q.key, scheduled: true, replaced });
+          }
+          const postId = await fbPublishNow(token, page, message, link, photoIds);
+          const ref = await db().ref("/fbpost/posts").push(Object.assign({}, base, { postId, scheduledAt: 0, status: "published" }));
+          if (meta.date && meta.slot) await db().ref(`/fbpost/slots/${meta.date}/${meta.slot}`).update({ status: "published", postId, queueId: null, recId: ref.key, error: null, updatedAt: Date.now() });
+          return res.json({ ok: true, postId, id: ref.key, scheduled: false, replaced });
+        }
+
+        case "queueRun": {
+          // 每 5 分鐘由 GitHub 排程呼叫（X-Sync-Key），也可從工具手動觸發
+          if (!cfg.metaToken || !cfg.pageId) return res.status(400).json({ error: "尚未設定 Meta" });
+          const token = cfg.metaToken, page = cfg.pageId, now = Date.now();
+          const snap = await db().ref("/fbpost/queue").get();
+          const out = [];
+          if (snap.exists()) {
+            for (const [qid, q] of Object.entries(snap.val())) {
+              if (!q || q.scheduledAt > now) continue;
+              if (q.running && now - q.running < 5 * 60000) continue;
+              await db().ref("/fbpost/queue/" + qid).update({ running: now });
+              try {
+                const postId = await fbPublishNow(token, page, q.message || "", q.link || "", q.photoIds || []);
+                if (q.recId) await db().ref("/fbpost/posts/" + q.recId).update({ postId, status: "published", publishedAt: now });
+                if (q.date && q.slot) await db().ref(`/fbpost/slots/${q.date}/${q.slot}`).update({ status: "published", postId, queueId: null, error: null, updatedAt: now });
+                await db().ref("/fbpost/queue/" + qid).remove();
+                out.push({ qid, ok: true, postId, late: Math.round((now - q.scheduledAt) / 60000) });
+              } catch (e) {
+                const tries = (q.tries || 0) + 1;
+                await db().ref("/fbpost/queue/" + qid).update({ running: null, tries, error: e.message });
+                if (q.date && q.slot) await db().ref(`/fbpost/slots/${q.date}/${q.slot}`).update({ error: e.message });
+                if (tries >= 5) { await db().ref("/fbpost/queue/" + qid).remove(); if (q.recId) await db().ref("/fbpost/posts/" + q.recId).update({ status: "failed", error: e.message }); }
+                out.push({ qid, ok: false, error: e.message, tries });
+              }
+            }
+          }
+          return res.json({ items: out, at: now });
         }
 
         case "limitTest": {
@@ -1096,6 +1133,7 @@ exports.fbpost = onRequest(
         case "deletePost": {
           const { id, postId } = body;
           if (postId) { try { await fbDelete(cfg.metaToken, postId); } catch (e) { if (!/does not exist|Unsupported/.test(e.message)) throw e; } }
+          if (id) { const qs = await db().ref("/fbpost/queue").orderByChild("recId").equalTo(id).get(); if (qs.exists()) for (const k of Object.keys(qs.val())) await db().ref("/fbpost/queue/" + k).remove(); }
           if (id) await db().ref("/fbpost/posts/" + id).update({ status: "deleted", deletedAt: Date.now() });
           if (body.date && body.slot) await db().ref(`/fbpost/slots/${body.date}/${body.slot}`).update({ status: "draft", postId: null, recId: null });
           return res.json({ ok: true });

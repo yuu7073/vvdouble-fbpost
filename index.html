@@ -748,7 +748,7 @@ function renderCal(){
     ds.forEach(function(d){
       var c = (S.week[d] || {})[sl];
       if (!c || !c.type) { h += '<div class="cell" data-d="' + d + '" data-s="' + sl + '"><div class="ty empty">＋</div></div>'; return; }
-      var st = c.status === 'published' ? '<span class="tag p">已發布</span>' : c.status === 'scheduled' ? '<span class="tag s">已排程</span>' : '<span class="tag d">草稿</span>';
+      var st = c.status === 'published' ? '<span class="tag p">已發布</span>' : c.status === 'scheduled' ? '<span class="tag s">已排程</span>' + (c.error ? ' <span class="red" title="' + esc(c.error) + '">發布失敗</span>' : '') : '<span class="tag d">草稿</span>';
       var ac = c.assignee === '家榛' ? 'a1' : c.assignee === '小逸' ? 'a2' : '';
       h += '<div class="cell has ' + ac + '" data-d="' + d + '" data-s="' + sl + '">' + (ac ? '<div class="av ' + (ac === 'a1' ? 'v1' : 'v2') + '">' + esc(c.assignee.slice(-1)) + '</div>' : '') + '<div class="ty">' + esc((TYPES[c.type] || {}).label || c.type) + '</div>' + (c.thumb ? '<img src="' + esc(c.thumb) + '">' : '') + '<div class="st">' + st + (c.skus && c.skus.length ? ' <span class="muted">' + esc(c.skus[0]) + '</span>' : '') + '</div></div>';
     });
@@ -1410,9 +1410,8 @@ $('#pub').addEventListener('click', async function(){
   if (!$('#msg').value.trim() && !ims.length) { say(m, '沒有內容', 'err'); return; }
   var mn = TYPES[S.type].min || 0; if (mn && ims.length < mn) { say(m, '這類型最少 ' + mn + ' 張圖，目前 ' + ims.length + ' 張', 'err'); return; }
   var ts = publishTs(), later = ts > Date.now() + 10 * 60000;
-  if (later && ts > Date.now() + 29 * 86400000) { say(m, 'FB 排程最多 29 天內，請先存草稿', 'err'); return; }
   var cur = (S.week[k.date] || {})[k.slot] || {};
-  var warn = cur.postId && cur.status === 'scheduled' ? '\n（這格原本的排程貼文會先從粉專刪除，再換成這篇）' : cur.postId && cur.status === 'published' ? '\n（這格已經發布過一篇，會再發一篇新的）' : '';
+  var warn = cur.status === 'scheduled' ? '\n（這格原本的排程會先取消，再換成這篇）' : cur.postId && cur.status === 'published' ? '\n（這格已經發布過一篇，會再發一篇新的）' : '';
   if (!confirm((later ? '排程 ' + fmt(ts) : '立即') + ' 發布到粉專？' + warn)) return;
   $('#pub').disabled = true; say(m, '上傳中…');
   try {
@@ -1422,7 +1421,7 @@ $('#pub').addEventListener('click', async function(){
       images: ims.map(function(i){ return { b64: i.b64, mime: i.mime, name: i.name }; }),
       meta: { type: S.type, skus: S.selected.map(function(p){ return p.sku; }), titles: S.selected.map(function(p){ return p.title; }), utm: currentLink() ? utmCampaign(ts) : '', by: $('#who').value, date: k.date, slot: k.slot }
     });
-    say(m, (r.scheduled ? '已排程' : '已發布') + '　貼文 ID ' + r.postId + (r.replaced ? '（舊排程已刪除）' : ''), 'ok'); loadWeek();
+    say(m, (r.scheduled ? '已排程，時間到由工具發布（最多晚 5 分鐘）' : '已發布　貼文 ID ' + r.postId) + (r.replaced ? '（舊排程已取消）' : ''), 'ok'); loadWeek();
   } catch (e) { say(m, e.message, 'err'); }
   $('#pub').disabled = false;
 });
@@ -1434,7 +1433,7 @@ async function loadList(){
   try {
     var r = await api('listPosts', { n: 200 });
     tb.innerHTML = r.posts.map(function(p){
-      var st = p.status === 'scheduled' ? '<span class="tag s">排程 ' + fmt(p.scheduledAt) + '</span>' : p.status === 'deleted' ? '<span class="tag x">已刪</span>' : '<span class="tag p">已發布</span>';
+      var st = p.status === 'scheduled' ? '<span class="tag s">排程 ' + fmt(p.scheduledAt) + '</span>' : p.status === 'deleted' ? '<span class="tag x">已刪</span>' : p.status === 'failed' ? '<span class="red">失敗</span>' : '<span class="tag p">已發布</span>';
       return '<tr><td>' + fmt(p.createdAt) + '<div class="muted">' + esc(p.by || '') + '</div></td><td>' + st + '</td><td>' + esc((TYPES[p.type] || {}).label || p.type) + '</td><td>' + esc((p.skus || []).join('、')) + '</td><td class="muted">' + esc((p.message || '').slice(0, 60)) + '</td><td>' + esc(p.utm || '') + '</td><td style="font-family:monospace;font-size:11px">' + esc(p.postId || '') + '</td><td>' + (p.status !== 'deleted' ? '<button class="d sm" data-id="' + esc(p.id) + '" data-pid="' + esc(p.postId) + '">刪除</button>' : '') + '</td></tr>';
     }).join('') || '<tr><td colspan="8" class="muted">還沒有紀錄</td></tr>';
     $$('#listBody button').forEach(function(b){ b.addEventListener('click', async function(){ if (!confirm('從粉專刪除這篇貼文？')) return; try { await api('deletePost', { id: b.dataset.id, postId: b.dataset.pid }); loadList(); } catch (e) { alert(e.message); } }); });
