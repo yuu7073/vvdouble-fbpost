@@ -281,7 +281,8 @@
 
   <div class="card" id="cardVideo">
     <h2><span class="n">3</span>影片</h2>
-    <div class="muted">影片貼文第一波先手動在 Meta Business Suite 發布，這裡只排進週曆、記錄文案。</div>
+    <div class="muted">影片在 Meta Business Suite 手動上傳，這裡記錄文案並標記進度。</div>
+    <div class="row" style="margin-top:8px"><span class="muted" style="font-size:12px">進度</span><div class="seg" id="manualSeg"><button data-v="draft">未做</button><button data-v="scheduled">已排程</button><button data-v="published">已發布</button></div><span id="manualMsg" class="muted"></span></div>
   </div>
 
   <div class="card">
@@ -699,6 +700,8 @@ async function assignCell(d, sl){
   try { await api('saveSlot', { date: d, slot: sl, data: { assignee: next } }); } catch (e) { say($('#pubMsg'), e.message, 'err'); }
 }
 $('#tipsRe').addEventListener('click', function(){ loadTips(true); });
+function renderManual(){ $$('#manualSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === (S.curStatus || 'draft')); }); }
+$$('#manualSeg button').forEach(function(b){ b.addEventListener('click', async function(){ if (!S.cur) return; S.curStatus = b.dataset.v; renderManual(); try { await api('saveSlot', { date: S.cur.date, slot: S.cur.slot, data: { status: S.curStatus } }); $('#manualMsg').textContent = '已標記'; setTimeout(function(){ $('#manualMsg').textContent = ''; }, 1200); loadWeek(); } catch (e) { $('#manualMsg').textContent = e.message; } }); });
 function fitTips(){ var c = $('#tipsCard'), side = $('.side'); if (!c || !side || window.innerWidth < 1000) { if (c) c.style.height = ''; return; } var h = side.getBoundingClientRect().bottom - c.getBoundingClientRect().top; c.style.height = Math.max(120, Math.round(h)) + 'px'; }
 window.addEventListener('resize', fitTips);
 $('#reshortBtn').addEventListener('click', async function(){ var m = $('#reshortMsg'); m.textContent = '處理中…'; try { var r = await api('reshorten', {}); var ok = r.items.filter(function(i){ return i.ok; }).length, bad = r.items.filter(function(i){ return !i.ok; }); m.textContent = '完成：換了 ' + ok + ' 篇' + (bad.length ? '，失敗 ' + bad.length + '：' + bad.map(function(b){ return b.error; }).join('；') : '') + (r.items.length ? '' : '（沒有需要換的）'); } catch (e) { m.textContent = e.message; } });
@@ -788,7 +791,7 @@ async function openSlot(date, slot){
   S.type = c.type || (((S.tpl || DEFAULT_TPL)[effectiveWeekType()] || {})[slot] || [])[(fromIso(date).getDay() + 6) % 7] || 'hero';
   $('#type').value = S.type;
   $('#at').value = date + 'T' + slot.slice(0,2) + ':' + slot.slice(2);
-  $('#editTitle').textContent = '編輯' + (c.assignee ? '　·　' + c.assignee : ''); S.assignee = c.assignee || ''; S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store; $('#bodyShape').value = c.bodyShape || ''; $('#picksIn').value = c.picksIn || ''; $('#picksOut').value = c.picksOut || ''; $('#picksOut').classList.toggle('hide', !c.picksOut);
+  $('#editTitle').textContent = '編輯' + (c.assignee ? '　·　' + c.assignee : ''); S.assignee = c.assignee || ''; S.curStatus = c.status || 'draft'; renderManual(); S.selected = (c.products || []).slice(); S.products = S.selected.slice(); S.images = []; S.shortUrl = c.shortUrl || ''; S.ratioOv = c.ratioOv || ''; S.store = c.store || ''; $('#storeSel').value = S.store; $('#bodyShape').value = c.bodyShape || ''; $('#picksIn').value = c.picksIn || ''; $('#picksOut').value = c.picksOut || ''; $('#picksOut').classList.toggle('hide', !c.picksOut);
   $('#msg').value = c.message || ''; $('#extra').value = c.extra || ''; $('#vars').innerHTML = ''; $('#varsStep').classList.add('hide'); $('#pubMsg').textContent = '';
   $('#linkCustom').value = c.linkCustom || '';
   if (c.images && c.images.length) { c.images.forEach(function(im){ S.images.push({ key: im.key, name: im.name, src: im.src, thumb: im.thumb || '', orig: im.orig || '', loading: !!im.orig, cam: im.cam || null, lab: im.lab || null }); }); }
@@ -1317,10 +1320,12 @@ function renderSym(){
   $$('#symCats button').forEach(function(b){ b.addEventListener('click', function(){ S.symCat = b.dataset.c; renderSym(); }); });
   $('#symKeys').innerHTML = (d[S.symCat] || []).map(function(s){ return '<span>' + esc(s) + '</span>'; }).join('');
   $$('#symKeys span').forEach(function(k){
-    k.addEventListener('click', function(){ copyText(k.textContent); k.classList.add('copied'); setTimeout(function(){ k.classList.remove('copied'); }, 500); });
+    k.addEventListener('mousedown', function(e){ e.preventDefault(); });
+    k.addEventListener('click', function(){ var v = k.textContent; var f = S.lastField; if (f && f.isConnected) { var st = f.selectionStart, en = f.selectionEnd; f.value = f.value.slice(0, st) + v + f.value.slice(en); f.selectionStart = f.selectionEnd = st + v.length; f.focus(); f.dispatchEvent(new Event('input')); } else { copyText(v); } k.classList.add('copied'); setTimeout(function(){ k.classList.remove('copied'); }, 500); });
     k.addEventListener('contextmenu', function(e){ e.preventDefault(); var v = k.textContent; var i = S.favs.indexOf(v); if (i >= 0) S.favs.splice(i, 1); else S.favs.unshift(v); S.favs = S.favs.slice(0, 60); localStorage.setItem('fbpost_favs', JSON.stringify(S.favs)); if (S.symG === 'FAV') renderSym(); });
   });
 }
+document.addEventListener('focusin', function(e){ var t = e.target; if (t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && t.type === 'text')) && t.closest('#editWrap')) S.lastField = t; });
 function insertAtCursor(s){ var ta = $('#msg'), st = ta.selectionStart, en = ta.selectionEnd; ta.value = ta.value.slice(0, st) + s + ta.value.slice(en); ta.selectionStart = ta.selectionEnd = st + s.length; ta.focus(); renderPreview(); }
 
 /* ---------- 連結 ---------- */
@@ -1370,6 +1375,7 @@ function renderPreview(){
   if (n) { var f = new Image(); f.onload = function(){ if (f.naturalHeight > f.naturalWidth) { box.classList.remove('lan'); box.classList.add('por'); } }; f.src = ims[0].preview; }
 }
 function slotData(status){
+  if (status === 'draft' && (S.curStatus === 'scheduled' || S.curStatus === 'published')) status = S.curStatus;
   return {
     type: S.type, status: status, assignee: S.assignee || '', ratioOv: S.ratioOv || '', store: S.store || '', bodyShape: $('#bodyShape').value, picksIn: $('#picksIn').value, picksOut: $('#picksOut').value, message: $('#msg').value, extra: $('#extra').value, link: $('#linkSel').value, linkCustom: $('#linkCustom').value, shortUrl: S.shortUrl,
     products: S.selected.map(function(p){ return { id: p.id, title: p.title, sku: p.sku, price: p.price, priceSale: p.priceSale, url: p.url, images: p.images, detailImages: p.detailImages, colors: p.colors, sizes: p.sizes || [], material: p.material || '', models: p.models || [], description: (p.description || '').slice(0, 600) }; }),

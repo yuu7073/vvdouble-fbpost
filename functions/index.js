@@ -8,7 +8,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-27a";
+const VERSION = "2026-10-27b";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -426,6 +426,32 @@ function taipeiWeek() {
   const dow = (now.getUTCDay() + 6) % 7; // 週一=0
   const mon = new Date(now); mon.setUTCDate(now.getUTCDate() - dow);
   return Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setUTCDate(mon.getUTCDate() + i); return d.toISOString().slice(0, 10); });
+}
+
+async function readActivities(cfg) {
+          const sheet = cfg.scheduleSheet || "1vrsXPERq4ppkHmlhdwU3IHKc6WZrgN9Kc8H97mvVQAs";
+          const year = Number(cfg.scheduleYear) || 2026;
+          const rows = await sheetsGet(sheet, "活動明細!A1:Z200");
+          const head = rows.find((r) => r.includes("活動／新品名稱")) || [];
+          const hi = rows.indexOf(head);
+          const col = (name) => head.findIndex((h) => String(h).replace(/\s/g, "").includes(name));
+          const ci = { name: col("名稱"), start: col("開始"), end: col("結束"), mech: col("優惠機制"), type: col("類型"), url: head.findIndex((h) => /網址|URL|url|連結/.test(String(h))), note: col("注意") };
+          const items = [];
+          rows.slice(hi + 1).forEach((r, i) => {
+            const name = r[ci.name]; if (!name) return;
+            const start = parseMD(r[ci.start], year); if (!start) return;
+            const end = parseMD(r[ci.end], year) || addDays(start, 30);
+            items.push({ row: hi + 2 + i, name: String(name).trim(), type: r[ci.type] || "", start, end, mech: r[ci.mech] || "", note: r[ci.note] || "", url: ((ci.url >= 0 && r[ci.url]) || r.find((v) => /^https?:\/\//.test(String(v || "").trim())) || "").toString().trim(), startRaw: r[ci.start] || "", endRaw: r[ci.end] || "" });
+          });
+          // 新品上架日期（行銷排程的「新品時程」列）
+          let newDates = [];
+          try {
+            const sch = await sheetsGet(sheet, "行銷排程!A1:ZZ6");
+            const dateRow = sch.find((r) => r[0] === "日期") || [];
+            const npRow = sch.find((r) => r[0] === "新品時程") || [];
+            npRow.forEach((v, i) => { if (/上架/.test(String(v || ""))) { const d = parseMD(dateRow[i], year); if (d) newDates.push({ date: d, label: String(v).replace(/\s+/g, " ") }); } });
+          } catch (e) { console.warn("schedule read", e.message); }
+          return { items, newDates };
 }
 
 const TYPE_LABEL = { new_preview: "新品預告", new_dm: "新品上架", promo_dm: "活動DM", weekly: "當周活動", hero: "主推商品", staff: "店員實穿", store: "門市陳列", reels_item: "單品影片", reels_brand: "形象影片", new: "新品上架", restock: "補貨", promo: "活動優惠", outfit: "穿搭", link: "活動連結" };
