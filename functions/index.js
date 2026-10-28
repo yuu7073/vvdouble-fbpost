@@ -9,7 +9,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-29a";
+const VERSION = "2026-10-29b";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -1215,7 +1215,7 @@ exports.fbpost = onRequest(
           if (snap.exists()) snap.forEach((c) => { const v = c.val(); if (v.postId) mine[v.postId] = { type: v.type || "", skus: v.skus || [], utm: v.utm || "" }; });
           const posts = (j.data || []).map((p) => {
             const ins = {};
-            ((p.insights && p.insights.data) || []).forEach((m) => { ins[m.name] = (m.values && m.values[0] && m.values[0].value) || 0; });
+            ((p.insights && p.insights.data) || []).forEach((m) => { let v = m.values && m.values[0] && m.values[0].value; if (v && typeof v === "object") v = Object.values(v).reduce((a, b) => a + (Number(b) || 0), 0); v = Number(v) || 0; if (m.period && m.period !== "lifetime" && ins[m.name] !== undefined) return; ins[m.name] = Math.max(ins[m.name] || 0, v); });
             return {
               id: p.id, message: (p.message || "").slice(0, 120), created: p.created_time, url: p.permalink_url, picture: p.full_picture || "",
               reach: ins.post_total_media_view_unique || 0, views: ins.post_media_view || 0, clicks: ins.post_clicks || 0, engaged: 0,

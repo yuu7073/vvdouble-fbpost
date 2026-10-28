@@ -124,6 +124,7 @@
   .step .f{display:flex;flex-direction:column;gap:4px}.step .f>label{font-size:12px;color:var(--mute)}.step .f>label b{color:#e0245e}
   .acts label{display:inline-flex;gap:6px;align-items:center;background:#f6f7f9;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px}
   .vars{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  th.sortable{cursor:pointer;user-select:none;white-space:nowrap}th.sortable:hover{color:var(--ink)}th.sortable.on{color:var(--acc)}th.sortable.on::after{content:' ▼';font-size:9px}th.sortable.on.asc::after{content:' ▲'}
   .var{border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap;cursor:pointer;max-height:220px;overflow:auto;background:#fafbfd}
   .var.on{border-color:var(--p,#2563eb);background:#eef3ff}
   .var b{display:inline-block;background:var(--ink);color:#fff;font-size:11px;padding:1px 8px;border-radius:999px;font-weight:600;margin-bottom:4px}
@@ -387,7 +388,7 @@
       <button id="statsBtn" class="p">載入</button>
       <span class="sp"></span><span class="muted" id="statsNote"></span>
     </div>
-    <table><thead><tr><th></th><th>時間</th><th>文案</th><th>來源</th><th class="num">觸及</th><th class="num">瀏覽</th><th class="num">點擊</th><th class="num">讚</th><th class="num">留言</th><th class="num">分享</th></tr></thead><tbody id="statsBody"></tbody></table>
+    <table id="statsTbl"><thead><tr><th></th><th class="sortable" data-k="created">時間</th><th>文案</th><th class="sortable" data-k="src">來源</th><th class="num sortable" data-k="reach">觸及</th><th class="num sortable" data-k="views">瀏覽</th><th class="num sortable" data-k="clicks">點擊</th><th class="num sortable" data-k="reactions">讚</th><th class="num sortable" data-k="comments">留言</th><th class="num sortable" data-k="shares">分享</th></tr></thead><tbody id="statsBody"></tbody></table>
   </div>
 </section>
 
@@ -1447,15 +1448,24 @@ async function loadList(){
 }
 
 /* ---------- 成效 ---------- */
+S.stats = []; S.statsSort = { k: 'created', asc: false };
+function renderStats(){
+  var tb = $('#statsBody'), k = S.statsSort.k, asc = S.statsSort.asc;
+  var val = function(p){ if (k === 'created') return new Date(p.created).getTime(); if (k === 'src') return p.mine ? 1 : 0; return Number(p[k]) || 0; };
+  var posts = S.stats.slice().sort(function(a, b){ var d = val(a) - val(b); return asc ? d : -d; });
+  $$('#statsTbl th.sortable').forEach(function(th){ th.classList.toggle('on', th.dataset.k === k); th.classList.toggle('asc', th.dataset.k === k && asc); });
+  tb.innerHTML = posts.map(function(p){
+    return '<tr><td>' + (p.picture ? '<img src="' + esc(p.picture) + '" style="width:44px;height:44px;object-fit:cover;border-radius:4px">' : '') + '</td><td>' + fmt(new Date(p.created).getTime()) + '</td><td><a href="' + esc(p.url) + '" target="_blank" style="color:inherit">' + esc(p.message || '（無文字）') + '</a></td><td>' + (p.mine ? '<span class="tag p">工具 ' + esc(p.mine.utm || '') + '</span>' : '<span class="tag">手動</span>') + '</td><td class="num">' + p.reach + '</td><td class="num">' + (p.views || 0) + '</td><td class="num">' + p.clicks + '</td><td class="num">' + p.reactions + '</td><td class="num">' + p.comments + '</td><td class="num">' + p.shares + '</td></tr>';
+  }).join('') || '<tr><td colspan="10" class="muted">這段期間沒有貼文</td></tr>';
+}
+$$('#statsTbl th.sortable').forEach(function(th){ th.addEventListener('click', function(){ var k = th.dataset.k; if (S.statsSort.k === k) S.statsSort.asc = !S.statsSort.asc; else S.statsSort = { k: k, asc: false }; renderStats(); }); });
 $('#statsBtn').addEventListener('click', async function(){
   var tb = $('#statsBody'); tb.innerHTML = '<tr><td colspan="10" class="muted">載入中…</td></tr>'; $('#statsNote').textContent = '';
   try {
     var r = await api('insights', { days: Number($('#days').value) });
-    var posts = r.posts.slice().sort(function(a, b){ return (b.reach || b.reactions) - (a.reach || a.reactions); });
+    S.stats = r.posts || [];
     if (r.insightsError) $('#statsNote').textContent = '觸及／點擊指標不可用：' + r.insightsError;
-    tb.innerHTML = posts.map(function(p){
-      return '<tr><td>' + (p.picture ? '<img src="' + esc(p.picture) + '" style="width:44px;height:44px;object-fit:cover;border-radius:4px">' : '') + '</td><td>' + fmt(new Date(p.created).getTime()) + '</td><td><a href="' + esc(p.url) + '" target="_blank" style="color:inherit">' + esc(p.message || '（無文字）') + '</a></td><td>' + (p.mine ? '<span class="tag p">工具 ' + esc(p.mine.utm || '') + '</span>' : '<span class="tag">手動</span>') + '</td><td class="num">' + p.reach + '</td><td class="num">' + (p.views || 0) + '</td><td class="num">' + p.clicks + '</td><td class="num">' + p.reactions + '</td><td class="num">' + p.comments + '</td><td class="num">' + p.shares + '</td></tr>';
-    }).join('') || '<tr><td colspan="10" class="muted">這段期間沒有貼文</td></tr>';
+    renderStats();
   } catch (e) { tb.innerHTML = '<tr><td colspan="10" class="red">' + esc(e.message) + '</td></tr>'; }
 });
 
