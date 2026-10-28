@@ -387,7 +387,7 @@
       <button id="statsBtn" class="p">載入</button>
       <span class="sp"></span><span class="muted" id="statsNote"></span>
     </div>
-    <table><thead><tr><th></th><th>時間</th><th>文案</th><th>來源</th><th class="num">觸及</th><th class="num">點擊</th><th class="num">互動</th><th class="num">讚</th><th class="num">留言</th><th class="num">分享</th></tr></thead><tbody id="statsBody"></tbody></table>
+    <table><thead><tr><th></th><th>時間</th><th>文案</th><th>來源</th><th class="num">觸及</th><th class="num">瀏覽</th><th class="num">點擊</th><th class="num">讚</th><th class="num">留言</th><th class="num">分享</th></tr></thead><tbody id="statsBody"></tbody></table>
   </div>
 </section>
 
@@ -1454,7 +1454,7 @@ $('#statsBtn').addEventListener('click', async function(){
     var posts = r.posts.slice().sort(function(a, b){ return (b.reach || b.reactions) - (a.reach || a.reactions); });
     if (r.insightsError) $('#statsNote').textContent = '觸及／點擊指標不可用：' + r.insightsError;
     tb.innerHTML = posts.map(function(p){
-      return '<tr><td>' + (p.picture ? '<img src="' + esc(p.picture) + '" style="width:44px;height:44px;object-fit:cover;border-radius:4px">' : '') + '</td><td>' + fmt(new Date(p.created).getTime()) + '</td><td><a href="' + esc(p.url) + '" target="_blank" style="color:inherit">' + esc(p.message || '（無文字）') + '</a></td><td>' + (p.mine ? '<span class="tag p">工具 ' + esc(p.mine.utm || '') + '</span>' : '<span class="tag">手動</span>') + '</td><td class="num">' + p.reach + '</td><td class="num">' + p.clicks + '</td><td class="num">' + p.engaged + '</td><td class="num">' + p.reactions + '</td><td class="num">' + p.comments + '</td><td class="num">' + p.shares + '</td></tr>';
+      return '<tr><td>' + (p.picture ? '<img src="' + esc(p.picture) + '" style="width:44px;height:44px;object-fit:cover;border-radius:4px">' : '') + '</td><td>' + fmt(new Date(p.created).getTime()) + '</td><td><a href="' + esc(p.url) + '" target="_blank" style="color:inherit">' + esc(p.message || '（無文字）') + '</a></td><td>' + (p.mine ? '<span class="tag p">工具 ' + esc(p.mine.utm || '') + '</span>' : '<span class="tag">手動</span>') + '</td><td class="num">' + p.reach + '</td><td class="num">' + (p.views || 0) + '</td><td class="num">' + p.clicks + '</td><td class="num">' + p.reactions + '</td><td class="num">' + p.comments + '</td><td class="num">' + p.shares + '</td></tr>';
     }).join('') || '<tr><td colspan="10" class="muted">這段期間沒有貼文</td></tr>';
   } catch (e) { tb.innerHTML = '<tr><td colspan="10" class="red">' + esc(e.message) + '</td></tr>'; }
 });

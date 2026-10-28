@@ -9,7 +9,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-27f";
+const VERSION = "2026-10-29a";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -1196,7 +1196,7 @@ exports.fbpost = onRequest(
         case "insights": {
           if (!cfg.metaToken || !cfg.pageId) return res.status(400).json({ error: "尚未設定 Meta" });
           const since = Math.floor((Date.now() - (Number(body.days) || 30) * 86400000) / 1000);
-          const metrics = "post_impressions_unique,post_clicks,post_engaged_users,post_reactions_like_total";
+          const metrics = "post_total_media_view_unique,post_media_view,post_clicks";
           let j;
           try {
             j = await fbGet(cfg.metaToken, `/${cfg.pageId}/published_posts`, {
@@ -1212,13 +1212,13 @@ exports.fbpost = onRequest(
           }
           const mine = {};
           const snap = await db().ref("/fbpost/posts").get();
-          if (snap.exists()) snap.forEach((c) => { const v = c.val(); if (v.postId) mine[v.postId] = { type: v.type, skus: v.skus, utm: v.utm }; });
+          if (snap.exists()) snap.forEach((c) => { const v = c.val(); if (v.postId) mine[v.postId] = { type: v.type || "", skus: v.skus || [], utm: v.utm || "" }; });
           const posts = (j.data || []).map((p) => {
             const ins = {};
             ((p.insights && p.insights.data) || []).forEach((m) => { ins[m.name] = (m.values && m.values[0] && m.values[0].value) || 0; });
             return {
               id: p.id, message: (p.message || "").slice(0, 120), created: p.created_time, url: p.permalink_url, picture: p.full_picture || "",
-              reach: ins.post_impressions_unique || 0, clicks: ins.post_clicks || 0, engaged: ins.post_engaged_users || 0,
+              reach: ins.post_total_media_view_unique || 0, views: ins.post_media_view || 0, clicks: ins.post_clicks || 0, engaged: 0,
               reactions: (p.reactions && p.reactions.summary && p.reactions.summary.total_count) || 0,
               comments: (p.comments && p.comments.summary && p.comments.summary.total_count) || 0,
               shares: (p.shares && p.shares.count) || 0,
