@@ -1119,8 +1119,9 @@ function drawOverlay(ctx, img, ov, W, H){
   ctx.drawImage(oc, (W - w) / 2, H - h + (ov.dy || 0) / 100 * H, w, h);
 }
 async function renderTitleThumbs(im){
-  var box = $('#labTitles'); var list = BUILTIN_TITLES.slice();
-  try { var r = await api('titlesList'); (r.files || []).forEach(function(f){ list.push({ name: f.name, src: 'dbx:' + f.path }); }); } catch (e) {}
+  var box = $('#labTitles'); var list = [];
+  try { var r = await api('titlesList'); (r.files || []).forEach(function(f){ list.push({ name: f.name, src: 'dbx:' + f.path, current: !!f.current }); }); } catch (e) {}
+  BUILTIN_TITLES.forEach(function(t){ list.push({ name: t.name + '（1020）', src: t.src }); });
   LAB.titleList = list;
   box.innerHTML = '<div data-s="" class="' + (LAB.ov ? '' : 'on') + '"><canvas></canvas><small>不加</small></div>' + list.map(function(t){ return '<div data-s="' + esc(t.src) + '" class="' + (LAB.ov && LAB.ov.src === t.src ? 'on' : '') + '"><canvas></canvas><small>' + esc(t.name) + '</small></div>'; }).join('');
   var base = new Image(); base.onload = function(){

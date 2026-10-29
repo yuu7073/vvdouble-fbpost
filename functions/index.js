@@ -9,7 +9,7 @@ const { GoogleAuth } = require("google-auth-library");
 
 admin.initializeApp();
 
-const VERSION = "2026-10-29b";
+const VERSION = "2026-10-30a";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const SL = "https://open.shopline.io/v1";
 const DBX_API = "https://api.dropboxapi.com/2";
@@ -712,9 +712,9 @@ exports.fbpost = onRequest(
           let dateDirs = [];
           const rootFolders = await listFolders(root);
           const yearNow = String(new Date().getFullYear());
-          const isCamp = (n) => /^\d{4}[a-z]*$/i.test(n);
+          const isCamp = (n) => /^[★☆✦]?\d{4}[a-z]*$/i.test(n);
           if (rootFolders.some((x) => isCat(x.name))) dateDirs = [{ name: root.split("/").pop(), path_lower: root, key: "9999" }];
-          else dateDirs = rootFolders.filter((x) => isCamp(x.name)).map((x) => Object.assign({ key: yearNow + x.name.slice(0, 4) }, x));
+          else dateDirs = rootFolders.filter((x) => isCamp(x.name)).map((x) => Object.assign({ key: yearNow + x.name.replace(/^\D+/, "").slice(0, 4) }, x));
           // 官網部門底下：直接的日期資料夾（如 1020）＋ 年份資料夾（如 2026）裡的日期資料夾（如 0825），依新到舊
           const di = root.indexOf("/官網部門");
           if (di >= 0) {
@@ -724,7 +724,7 @@ exports.fbpost = onRequest(
               for (const x of top) {
                 if (dateDirs.some((d) => d.path_lower === x.path_lower)) continue;
                 if (/^20\d{2}$/.test(x.name)) { try { (await listFolders(x.path_lower)).filter((y) => isCamp(y.name)).forEach((y) => dateDirs.push(Object.assign({ key: x.name + y.name.slice(0, 4) }, y))); } catch (e) {} }
-                else if (isCamp(x.name)) dateDirs.push(Object.assign({ key: yearNow + x.name.slice(0, 4) }, x));
+                else if (isCamp(x.name)) dateDirs.push(Object.assign({ key: yearNow + x.name.replace(/^\D+/, "").slice(0, 4) }, x));
               }
             } catch (e) {}
           }
@@ -975,12 +975,24 @@ exports.fbpost = onRequest(
           return res.json({ path: j.path_lower, name: j.name });
         }
         case "titlesList": {
-          // 大標 PNG：官網部門/大標
+          // 大標：每一檔資料夾（官網部門/★1103）裡的「1103大標題標準字白／黑」，最新檔期優先；另加舊的 官網部門/大標
           const root = cfg.dropboxRoot || ""; const i = root.indexOf("/官網部門");
-          const path = (i >= 0 ? root.slice(0, i + 5) : root) + "/大標";
-          let files = [];
-          try { const j = await dbxRpc(cfg, "/files/list_folder", { path, limit: 500 }); files = (j.entries || []).filter((e) => e[".tag"] === "file" && /\.png$/i.test(e.name)).map((e) => ({ name: e.name.replace(/\.png$/i, ""), path: e.path_lower })); } catch (e) { if (!/not_found/.test(e.message)) throw e; try { await dbxRpc(cfg, "/files/create_folder_v2", { path, autorename: false }); } catch (e2) {} }
-          return res.json({ path, files });
+          const dept = i >= 0 ? root.slice(0, i + 5) : root;
+          const list = async (path) => { let j = await dbxRpc(cfg, "/files/list_folder", { path, limit: 2000 }); let e = j.entries || []; while (j.has_more) { j = await dbxRpc(cfg, "/files/list_folder/continue", { cursor: j.cursor }); e = e.concat(j.entries || []); } return e; };
+          const files = [];
+          try {
+            const camps = (await list(dept)).filter((e) => e[".tag"] === "folder" && /^[★☆✦]?\d{4}[a-z]*$/i.test(e.name)).map((e) => Object.assign({ mmdd: e.name.replace(/^\D+/, "").slice(0, 4) }, e)).sort((a, b) => b.mmdd.localeCompare(a.mmdd)).slice(0, 2);
+            for (let k = 0; k < camps.length; k++) {
+              const c = camps[k];
+              try {
+                const fs = (await list(c.path_lower)).filter((e) => e[".tag"] === "file" && /大標題標準字/.test(e.name) && /\.png$/i.test(e.name));
+                fs.sort((a, b) => (/白/.test(a.name) ? 0 : 1) - (/白/.test(b.name) ? 0 : 1));
+                fs.forEach((e) => files.push({ name: (k === 0 ? "本檔 " : "上檔 ") + c.mmdd + (/白/.test(e.name) ? " 白" : /黑/.test(e.name) ? " 黑" : ""), path: e.path_lower, campaign: c.mmdd, current: k === 0 }));
+              } catch (e) {}
+            }
+          } catch (e) {}
+          try { const j = await dbxRpc(cfg, "/files/list_folder", { path: dept + "/大標", limit: 500 }); (j.entries || []).filter((e) => e[".tag"] === "file" && /\.png$/i.test(e.name)).forEach((e) => files.push({ name: e.name.replace(/\.png$/i, ""), path: e.path_lower })); } catch (e) {}
+          return res.json({ files });
         }
         case "teamsReset": {
           await db().ref("/fbpost/teams/done").remove();
